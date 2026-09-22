@@ -150,11 +150,11 @@ export default function DecisionWorkbench() {
 
   async function decomposeCase() {
     if (!question.trim()) {
-      setNotice("Write the decision question first.");
+      setNotice("State the question this case is meant to insure.");
       return;
     }
     if (!sources.length) {
-      setNotice("Register at least one source first.");
+      setNotice("Enter at least one source before decomposition.");
       return;
     }
     setBusy("examine");
@@ -212,7 +212,7 @@ export default function DecisionWorkbench() {
         <div className="brandMark">DI</div>
         <div>
           <div className="brandName">DECISION INSURANCE</div>
-          <div className="brandPhrase">Evidence before action</div>
+          <div className="brandPhrase">Proof before commitment</div>
         </div>
         <div className="mastState">
           <span>{sources.length.toString().padStart(2, "0")} sources</span>
@@ -237,19 +237,19 @@ export default function DecisionWorkbench() {
         <div className="intakeBand">
           <label htmlFor="paste-source">PASTE</label>
           <textarea id="paste-source" value={pasteText} onChange={event => setPasteText(event.target.value)} placeholder="Paste a report, research passage, or AI recommendation" />
-          <button className="lineAction" type="button" onClick={registerText}>Register text</button>
+          <button className="lineAction" type="button" onClick={registerText}>Enter as source</button>
         </div>
 
         <div className="intakeBand">
           <label htmlFor="web-source">WEB SOURCE</label>
           <input id="web-source" value={webAddress} onChange={event => setWebAddress(event.target.value)} placeholder="https://" inputMode="url" />
-          <button className="lineAction" type="button" onClick={readWebSource} disabled={busy === "web"}>{busy === "web" ? "Reading source" : "Read web source"}</button>
+          <button className="lineAction" type="button" onClick={readWebSource} disabled={busy === "web"}>{busy === "web" ? "Reading source" : "Enter webpage as source"}</button>
         </div>
 
         <div className="intakeBand fileBand">
           <span className="bandLabel">FILES</span>
           <input ref={fileRef} className="hiddenInput" type="file" multiple accept=".pdf,.docx,.txt,.md,.markdown,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={importFiles} />
-          <button className="lineAction" type="button" onClick={() => fileRef.current?.click()} disabled={busy === "files"}>{busy === "files" ? "Reading files" : "Import research files"}</button>
+          <button className="lineAction" type="button" onClick={() => fileRef.current?.click()} disabled={busy === "files"}>{busy === "files" ? "Reading files" : "Enter source files"}</button>
           <p>PDF DOCX TXT MD</p>
         </div>
 
@@ -265,7 +265,7 @@ export default function DecisionWorkbench() {
               <button type="button" className="erase" onClick={() => removeSource(source.id)} aria-label={`Remove ${source.label}`}>×</button>
             </div>
           ))}
-          {sources.length === 0 ? <p className="railVoid">Nothing registered yet.</p> : null}
+          {sources.length === 0 ? <p className="railVoid">No source has entered this case.</p> : null}
         </div>
       </section>
 
@@ -307,7 +307,7 @@ export default function DecisionWorkbench() {
         ) : (
           <div className="fieldEmpty">
             <div className="fieldEmptyRule" />
-            <p>Register the material. State the decision. The field will separate claims from what actually supports them.</p>
+            <p>Enter the case material. State the question. The claim field will expose what is asserted, what supports it, and what remains unresolved.</p>
           </div>
         )}
       </section>
@@ -346,7 +346,7 @@ export default function DecisionWorkbench() {
                     <span>retrieval relevance {item.relevance}</span>
                   </div>
                 );
-              }) : <p>No source linked evidence.</p>}
+              }) : <p>No registered source currently supports or contradicts this claim.</p>}
             </section>
 
             <section className="inspectionSection">
@@ -374,7 +374,7 @@ export default function DecisionWorkbench() {
             </section>
           </div>
         ) : (
-          <p className="railVoid">Select a claim after decomposition.</p>
+          <p className="railVoid">Select one claim to expose its evidence chain.</p>
         )}
       </aside>
     </main>
