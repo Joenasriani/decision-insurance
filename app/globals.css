@@ -24,9 +24,7 @@ button { color: inherit; }
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr) 360px;
   grid-template-rows: 58px minmax(0, 1fr);
-  background:
-    linear-gradient(var(--line) 1px, transparent 1px) 0 58px / 100% 44px,
-    var(--ground);
+  background: var(--ground);
 }
 
 .mast {
@@ -326,7 +324,7 @@ button { color: inherit; }
 .claimOrdinal { color: var(--faint); font: 9px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; text-align: center; }
 .statusGlyph { width: 7px; height: 7px; border: 1px solid currentColor; }
 .status_SUPPORTED { color: var(--acid); background: var(--acid); }
-.status_PARTIAL { color: var(--warn); background: linear-gradient(90deg, var(--warn) 50%, transparent 50%); }
+.status_PARTIAL { color: var(--warn); background: transparent; box-shadow: inset 3px 0 0 var(--warn); }
 .status_UNSUPPORTED { color: var(--danger); }
 .status_ASSUMPTION { color: var(--warn); transform: rotate(45deg); }
 .status_CONTRADICTED { color: var(--danger); background: var(--danger); transform: rotate(45deg); }
