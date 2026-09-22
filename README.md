@@ -32,3 +32,21 @@ When no model adapter is configured, the application runs a deterministic decomp
 ## Product rule
 
 A model statement is never evidence merely because the model said it.
+
+## Correction loop
+
+The project began with this learning cycle:
+
+```python
+optimizer.zero_grad()
+predictions = model(inputs)
+loss = loss_fn(predictions, targets)
+loss.backward()
+optimizer.step()
+```
+
+Decision Insurance translates that pattern into an evidence correction cycle:
+
+`CLEAR EVALUATION STATE → INGEST REASONING → MEASURE EVIDENCE ERROR → LOCATE FAILURE → UPDATE ANALYSIS → REEVALUATE`
+
+The MVP does not retrain model weights. It updates claims, evidence links, assumptions, contradictions, unknowns, classifications, review rules, and examination state.
