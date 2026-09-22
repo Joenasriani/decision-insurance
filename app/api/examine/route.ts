@@ -29,7 +29,7 @@ const requestSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const input = requestSchema.parse(await request.json());
-    const gatewayReady = Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN);
+    const gatewayReady = Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || process.env.VERCEL);
     if (gatewayReady) {
       try {
         const examination = await examineWithModel(input.question, input.sources);

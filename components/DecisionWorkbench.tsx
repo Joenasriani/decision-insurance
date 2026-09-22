@@ -1,7 +1,6 @@
 "use client";
 
 import { ChangeEvent, useMemo, useRef, useState } from "react";
-import { challengeClaim } from "@/lib/engine";
 import { saveExamination } from "@/lib/storage";
 import type { ClaimStatus, Examination, SourceRecord, SourceRole } from "@/types/core";
 
@@ -179,14 +178,29 @@ export default function DecisionWorkbench() {
 
   async function applyChallenge() {
     if (!examination || !selectedClaim) return;
-    const challenge = challengeClaim(examination, selectedClaim.id);
-    const next = {
-      ...examination,
-      version: examination.version + 1,
-      challenges: [...examination.challenges.filter(item => item.claimId !== selectedClaim.id), challenge]
-    };
-    setExamination(next);
-    await saveExamination(next);
+    setBusy("challenge");
+    setNotice(null);
+    try {
+      const response = await fetch("/api/challenge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ examination, claimId: selectedClaim.id })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "The claim test did not complete.");
+      const next = {
+        ...examination,
+        version: examination.version + 1,
+        challenges: [...examination.challenges.filter(item => item.claimId !== selectedClaim.id), data.challenge]
+      };
+      setExamination(next);
+      if (data.limitation) setNotice(`Model challenge unavailable. Deterministic test used: ${data.limitation}`);
+      await saveExamination(next);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "The claim test did not complete.");
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function setManualStatus(status: ClaimStatus) {
@@ -362,7 +376,7 @@ export default function DecisionWorkbench() {
             </section>
 
             <section className="inspectionSection challengeSection">
-              <button type="button" className="challengeAction" onClick={applyChallenge}>Challenge this claim</button>
+              <button type="button" className="challengeAction" onClick={applyChallenge} disabled={busy === "challenge"}>{busy === "challenge" ? "Testing the claim" : "Challenge this claim"}</button>
               {challenge ? (
                 <div className="challengeResult">
                   <strong>{challenge.result.replaceAll("_", " ")}</strong>

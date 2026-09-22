@@ -3,6 +3,7 @@ import { z } from "zod";
 import { chunkSources, stableId } from "@/lib/engine";
 import type {
   AssumptionRecord,
+  ChallengeRecord,
   ClaimRecord,
   ContradictionRecord,
   EvidenceRecord,
@@ -53,6 +54,29 @@ const evaluatedClaimsSchema = z.object({
     unknowns: z.array(z.string())
   }))
 });
+
+
+const challengeSchema = z.object({
+  result: z.enum(["SURVIVES", "WEAKENED", "MATERIAL_GAP", "CONTRADICTED", "UNRESOLVED"]),
+  weaknesses: z.array(z.string()).max(8),
+  missingEvidence: z.array(z.string()).max(8),
+  alternativeExplanations: z.array(z.string()).max(8)
+});
+
+const challengeSystem = `You are the adversarial claim test inside Decision Insurance.
+You receive one claim and only the evidence already registered in its examination.
+Try to falsify or narrow the claim without inventing objections.
+Use no outside facts.
+Do not invent evidence, sources, dates, quotations, pages, URLs, or evidence IDs.
+Distinguish missing evidence from contradictory evidence.
+A polished source is not proof by itself.
+If the claim survives the available challenge, return SURVIVES.
+If the evidence only supports a narrower formulation, return WEAKENED.
+If a required evidential dimension is absent, return MATERIAL_GAP.
+If linked evidence materially conflicts with the claim, return CONTRADICTED.
+If the supplied structure does not permit a justified result, return UNRESOLVED.
+Do not expose private chain of thought.
+Return concise observable findings only.`;
 
 const extractionSystem = `You are the claim decomposition stage inside Decision Insurance.
 Follow these rules strictly.
@@ -220,5 +244,74 @@ export async function examineWithModel(question: string, sources: SourceRecord[]
       criticalClaimIds: claims.filter(claim => claim.criticality === "CRITICAL" && claim.status !== "SUPPORTED").map(claim => claim.id)
     },
     limitations: []
+  };
+}
+
+
+export async function challengeWithModel(examination: Examination, claimId: string): Promise<ChallengeRecord> {
+  const claim = examination.claims.find(item => item.id === claimId);
+  if (!claim) throw new Error("Claim not found.");
+
+  const evidence = examination.evidence
+    .filter(item => claim.evidenceIds.includes(item.id))
+    .map(item => {
+      const source = examination.sources.find(sourceItem => sourceItem.id === item.sourceId);
+      const chunk = examination.chunks.find(chunkItem => chunkItem.id === item.chunkId);
+      return {
+        evidenceId: item.id,
+        sourceId: item.sourceId,
+        sourceLabel: source?.label ?? item.sourceId,
+        canonicalUrl: source?.canonicalUrl ?? null,
+        page: chunk?.pageStart ?? null,
+        excerpt: item.excerpt,
+        normalizedFact: item.normalizedFact,
+        supportsClaim: item.supportsClaimIds.includes(claimId),
+        contradictsClaim: item.contradictsClaimIds.includes(claimId)
+      };
+    });
+
+  const assumptions = examination.assumptions
+    .filter(item => claim.assumptionIds.includes(item.id))
+    .map(item => ({ id: item.id, text: item.text, status: item.status }));
+  const contradictions = examination.contradictions
+    .filter(item => claim.contradictionIds.includes(item.id))
+    .map(item => ({ id: item.id, description: item.description, evidenceIds: item.evidenceIds, severity: item.severity }));
+  const unknowns = examination.unknowns
+    .filter(item => claim.unknownIds.includes(item.id))
+    .map(item => ({ id: item.id, question: item.question, requiredEvidence: item.requiredEvidence }));
+
+  const model = process.env.AI_MODEL || "openai/gpt-5.4";
+  const response = await generateText({
+    model,
+    system: challengeSystem,
+    output: Output.object({ schema: challengeSchema, name: "DecisionInsuranceChallenge" }),
+    prompt: JSON.stringify({
+      decisionQuestion: examination.question,
+      claim: {
+        id: claim.id,
+        text: claim.text,
+        status: claim.status,
+        criticality: claim.criticality,
+        rationale: claim.rationale
+      },
+      evidence,
+      assumptions,
+      contradictions,
+      unknowns
+    })
+  });
+
+  const output = response.output;
+  if (output.result === "CONTRADICTED" && !evidence.some(item => item.contradictsClaim)) {
+    output.result = "UNRESOLVED";
+  }
+
+  return {
+    id: stableId("CH", `${examination.id}:${claimId}:${examination.version}`),
+    claimId,
+    result: output.result,
+    weaknesses: output.weaknesses,
+    missingEvidence: output.missingEvidence,
+    alternativeExplanations: output.alternativeExplanations
   };
 }
