@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Decision Insurance",
-  description: "Inspect the evidence structure behind a recommendation before action."
+  description: "Check whether the available sources actually support a recommendation before you act."
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
