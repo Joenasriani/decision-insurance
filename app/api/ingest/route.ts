@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
           text,
           pageCount: infoResult.total,
           extractionStatus: text.length > 100 ? "COMPLETE" : "PARTIAL",
-          notes: text.length > 100 ? [] : ["Very little machine readable text was extracted. The PDF may require OCR."]
+          notes: text.length > 100 ? [] : ["This PDF contains very little selectable text. Try another copy or paste the relevant text manually."]
         });
       } finally {
         await parser.destroy();
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    throw new Error("This file type is not part of the current research intake.");
+    throw new Error("This file type is not supported yet. Use PDF, DOCX, TXT, or Markdown.");
   } catch (error) {
     const message = error instanceof Error ? error.message : "The file could not be read.";
     return NextResponse.json({ error: message }, { status: 400 });
