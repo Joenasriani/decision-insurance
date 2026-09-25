@@ -208,12 +208,12 @@ export function examineLocally(question: string, sources: SourceRecord[]): Exami
       contradictionIds,
       unknownIds,
       rationale: status === "SUPPORTED"
-        ? "Multiple retrieved passages materially overlap the claim."
+        ? "More than one linked source supports this statement."
         : status === "CONTRADICTED"
-          ? "At least one retrieved passage materially conflicts with the claim."
+          ? "At least one linked source conflicts with this statement."
           : status === "ASSUMPTION"
-            ? "The claim uses predictive or inferential language without enough direct support."
-            : "The available corpus does not directly establish the full claim.",
+            ? "This statement depends on something the available sources do not yet establish."
+            : "The available sources do not yet establish the full statement.",
       humanOverride: false
     });
   });
@@ -262,12 +262,12 @@ export function challengeClaim(examination: Examination, claimId: string) {
   const missingEvidence: string[] = [];
   const alternatives: string[] = [];
 
-  if (evidence.length === 0) weaknesses.push("No source linked evidence currently supports this claim.");
-  if (claim.status === "PARTIAL") weaknesses.push("The retrieved material establishes only part of the proposition.");
-  if (claim.assumptionIds.length) weaknesses.push("The claim depends on an unresolved assumption.");
-  if (claim.contradictionIds.length) weaknesses.push("At least one source linked passage conflicts with this claim.");
-  if (claim.unknownIds.length) missingEvidence.push("Direct evidence for the unresolved material proposition.");
-  alternatives.push("The same observations may support a narrower conclusion than the current claim.");
+  if (evidence.length === 0) weaknesses.push("No linked source currently supports this statement.");
+  if (claim.status === "PARTIAL") weaknesses.push("The linked sources support only part of this statement.");
+  if (claim.assumptionIds.length) weaknesses.push("This statement depends on an assumption that has not been verified.");
+  if (claim.contradictionIds.length) weaknesses.push("At least one linked source conflicts with this statement.");
+  if (claim.unknownIds.length) missingEvidence.push("Direct source support for the unresolved part of this statement.");
+  alternatives.push("The same evidence may support a narrower conclusion.");
 
   const result = claim.contradictionIds.length
     ? "CONTRADICTED"
