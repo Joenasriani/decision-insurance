@@ -43,7 +43,9 @@ export async function POST(request: NextRequest) {
     const examination = examineLocally(input.question, input.sources);
     return NextResponse.json({ examination, mode: "deterministic" });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "The case could not be decomposed.";
+    const message = error instanceof z.ZodError
+      ? "Some of the material could not be read in the expected format. Remove the problem item and try again."
+      : "The evidence check could not be completed. Review the main report, decision question, and added sources, then try again.";
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }
