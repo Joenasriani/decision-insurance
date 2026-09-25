@@ -5,28 +5,42 @@ import { saveExamination } from "@/lib/storage";
 import type { ClaimStatus, Examination, SourceRecord, SourceRole } from "@/types/core";
 
 const roleLabels: Record<SourceRole, string> = {
-  PRIMARY_INPUT_REPORT: "Report under examination",
-  RESEARCH_SOURCE: "Research material",
-  SUPPORTING_EVIDENCE: "Supporting material",
-  COUNTER_EVIDENCE: "Counter material",
+  PRIMARY_INPUT_REPORT: "Main report or recommendation",
+  RESEARCH_SOURCE: "Research or background",
+  SUPPORTING_EVIDENCE: "Evidence that supports it",
+  COUNTER_EVIDENCE: "Evidence that challenges it",
   USER_REFERENCE: "Reference material",
-  UNKNOWN_ROLE: "Unclassified material"
+  UNKNOWN_ROLE: "Not classified yet"
 };
 
 const statusLabels: Record<ClaimStatus, string> = {
   SUPPORTED: "Supported",
-  PARTIAL: "Partial",
-  UNSUPPORTED: "Unsupported",
+  PARTIAL: "Partly supported",
+  UNSUPPORTED: "Not supported",
   ASSUMPTION: "Assumption",
-  CONTRADICTED: "Contradicted",
-  UNKNOWN: "Unknown"
+  CONTRADICTED: "Conflicting evidence",
+  UNKNOWN: "Not enough information"
 };
 
 const readinessLabels: Record<Examination["readiness"]["label"], string> = {
-  STRONG_EVIDENCE_COVERAGE: "Strong evidence coverage",
-  MATERIAL_GAPS_REMAIN: "Material gaps remain",
-  INSUFFICIENT_EVIDENCE: "Insufficient evidence",
-  CRITICAL_CONTRADICTION_PRESENT: "Critical contradiction present"
+  STRONG_EVIDENCE_COVERAGE: "Well supported",
+  MATERIAL_GAPS_REMAIN: "Important gaps remain",
+  INSUFFICIENT_EVIDENCE: "Not enough evidence yet",
+  CRITICAL_CONTRADICTION_PRESENT: "Major conflict found"
+};
+
+const criticalityLabels: Record<Examination["claims"][number]["criticality"], string> = {
+  CRITICAL: "Must verify",
+  IMPORTANT: "Important",
+  SUPPORTING: "Supporting detail"
+};
+
+const challengeLabels: Record<Examination["challenges"][number]["result"], string> = {
+  SURVIVES: "Still holds up",
+  WEAKENED: "Weakened",
+  MATERIAL_GAP: "Important gap found",
+  CONTRADICTED: "Conflicting evidence found",
+  UNRESOLVED: "Needs more evidence"
 };
 
 function sourceId(seed: string) {
@@ -69,7 +83,7 @@ export default function DecisionWorkbench() {
     const now = new Date().toISOString();
     pushSource({
       id: sourceId(`${text.slice(0, 160)}:${now}`),
-      label: role === "PRIMARY_INPUT_REPORT" ? "Pasted report" : "Pasted research",
+      label: role === "PRIMARY_INPUT_REPORT" ? "Pasted report or recommendation" : "Pasted source",
       kind: "TEXT",
       role,
       extractionMethod: "PASTED",
@@ -149,11 +163,11 @@ export default function DecisionWorkbench() {
 
   async function decomposeCase() {
     if (!question.trim()) {
-      setNotice("State the question this case is meant to insure.");
+      setNotice("Tell us what decision you are trying to make.");
       return;
     }
     if (!sources.length) {
-      setNotice("Enter at least one source before decomposition.");
+      setNotice("Add at least one report, recommendation, or source first.");
       return;
     }
     setBusy("examine");
@@ -165,12 +179,12 @@ export default function DecisionWorkbench() {
         body: JSON.stringify({ question: question.trim(), sources })
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "The case could not be decomposed.");
+      if (!response.ok) throw new Error(data.error || "The evidence check could not be completed.");
       setExamination(data.examination);
       setSelectedClaimId(data.examination.claims[0]?.id ?? null);
       await saveExamination(data.examination);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "The case could not be decomposed.");
+      setNotice(error instanceof Error ? error.message : "The evidence check could not be completed.");
     } finally {
       setBusy(null);
     }
@@ -194,7 +208,7 @@ export default function DecisionWorkbench() {
         challenges: [...examination.challenges.filter(item => item.claimId !== selectedClaim.id), data.challenge]
       };
       setExamination(next);
-      if (data.limitation) setNotice(`Model challenge unavailable. Deterministic test used: ${data.limitation}`);
+      if (data.limitation) setNotice("The deeper AI stress-test was unavailable, so a basic consistency check was used instead.");
       await saveExamination(next);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "The claim test did not complete.");
@@ -226,21 +240,27 @@ export default function DecisionWorkbench() {
         <div className="brandMark">DI</div>
         <div>
           <div className="brandName">DECISION INSURANCE</div>
-          <div className="brandPhrase">Proof before commitment</div>
+          <div className="brandPhrase">Check what holds up before you act</div>
         </div>
         <div className="mastState">
-          <span>{sources.length.toString().padStart(2, "0")} sources</span>
-          <span>v{examination?.version ?? 0}</span>
+          <span>{sources.length} {sources.length === 1 ? "source" : "sources"}</span>
+          <span>{examination ? `review ${examination.version}` : "not checked yet"}</span>
         </div>
       </header>
 
       <section className="materialRail" aria-label="Case material">
         <div className="railHeading">
           <span className="indexMark">01</span>
-          <h2>CASE MATERIAL</h2>
+          <h2>ADD YOUR MATERIAL</h2>
         </div>
 
-        <div className="roleMatrix" aria-label="Source role">
+        <div className="firstRunGuide">
+          <strong>Start here</strong>
+          <p>Add the report or recommendation you want to check. Then add research or sources that may support or challenge it.</p>
+        </div>
+
+        <div className="rolePrompt">What are you adding?</div>
+        <div className="roleMatrix" aria-label="What kind of material are you adding?">
           {(["PRIMARY_INPUT_REPORT", "RESEARCH_SOURCE", "COUNTER_EVIDENCE"] as SourceRole[]).map(item => (
             <button key={item} type="button" className={role === item ? "roleChoice active" : "roleChoice"} onClick={() => setRole(item)}>
               {roleLabels[item]}
@@ -249,22 +269,22 @@ export default function DecisionWorkbench() {
         </div>
 
         <div className="intakeBand">
-          <label htmlFor="paste-source">PASTE</label>
-          <textarea id="paste-source" value={pasteText} onChange={event => setPasteText(event.target.value)} placeholder="Paste a report, research passage, or AI recommendation" />
-          <button className="lineAction" type="button" onClick={registerText}>Enter as source</button>
+          <label htmlFor="paste-source">PASTE TEXT</label>
+          <textarea id="paste-source" value={pasteText} onChange={event => setPasteText(event.target.value)} placeholder="Paste the report, recommendation, research, or evidence here" />
+          <button className="lineAction" type="button" onClick={registerText}>Add this text</button>
         </div>
 
         <div className="intakeBand">
-          <label htmlFor="web-source">WEB SOURCE</label>
+          <label htmlFor="web-source">WEBPAGE</label>
           <input id="web-source" value={webAddress} onChange={event => setWebAddress(event.target.value)} placeholder="https://" inputMode="url" />
-          <button className="lineAction" type="button" onClick={readWebSource} disabled={busy === "web"}>{busy === "web" ? "Reading source" : "Enter webpage as source"}</button>
+          <button className="lineAction" type="button" onClick={readWebSource} disabled={busy === "web"}>{busy === "web" ? "Reading webpage" : "Add webpage"}</button>
         </div>
 
         <div className="intakeBand fileBand">
-          <span className="bandLabel">FILES</span>
+          <span className="bandLabel">UPLOAD FILES</span>
           <input ref={fileRef} className="hiddenInput" type="file" multiple accept=".pdf,.docx,.txt,.md,.markdown,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={importFiles} />
-          <button className="lineAction" type="button" onClick={() => fileRef.current?.click()} disabled={busy === "files"}>{busy === "files" ? "Reading files" : "Enter source files"}</button>
-          <p>PDF DOCX TXT MD</p>
+          <button className="lineAction" type="button" onClick={() => fileRef.current?.click()} disabled={busy === "files"}>{busy === "files" ? "Reading files" : "Choose files"}</button>
+          <p>PDF, DOCX, TXT, or Markdown</p>
         </div>
 
         <div className="sourceRegister">
@@ -279,31 +299,31 @@ export default function DecisionWorkbench() {
               <button type="button" className="erase" onClick={() => removeSource(source.id)} aria-label={`Remove ${source.label}`}>×</button>
             </div>
           ))}
-          {sources.length === 0 ? <p className="railVoid">No source has entered this case.</p> : null}
+          {sources.length === 0 ? <p className="railVoid">Nothing added yet. Start with the report or recommendation you want to check.</p> : null}
         </div>
       </section>
 
       <section className="evidenceField">
         <div className="questionBand">
           <span className="indexMark">02</span>
-          <label htmlFor="decision-question">QUESTION TO INSURE</label>
-          <textarea id="decision-question" value={question} onChange={event => setQuestion(event.target.value)} placeholder="What decision is this evidence supposed to support?" />
-          <button type="button" className="primaryAction" onClick={decomposeCase} disabled={busy === "examine"}>{busy === "examine" ? "Decomposing" : "Decompose the case"}</button>
+          <label htmlFor="decision-question">WHAT ARE YOU TRYING TO DECIDE?</label>
+          <textarea id="decision-question" value={question} onChange={event => setQuestion(event.target.value)} placeholder="Example: Should we act on this recommendation based on the evidence?" />
+          <button type="button" className="primaryAction" onClick={decomposeCase} disabled={busy === "examine"}>{busy === "examine" ? "Checking the evidence" : "Check the evidence"}</button>
           {notice ? <div className="notice" role="status">{notice}</div> : null}
         </div>
 
         {examination ? (
           <div className="fieldBody">
             <div className="readinessStrip">
-              <span>CURRENT EVIDENCE STATE</span>
+              <span>WHAT THE EVIDENCE SAYS</span>
               <strong>{readinessLabels[examination.readiness.label]}</strong>
-              <span>{examination.readiness.criticalClaimIds.length} unresolved critical claims</span>
+              <span>{examination.readiness.criticalClaimIds.length} must-check {examination.readiness.criticalClaimIds.length === 1 ? "item" : "items"} still unresolved</span>
             </div>
 
             <div className="fieldHeading">
               <span className="indexMark">03</span>
-              <h2>CLAIM FIELD</h2>
-              <span>{examination.claims.length} atomic claims</span>
+              <h2>KEY STATEMENTS TO CHECK</h2>
+              <span>{examination.claims.length} {examination.claims.length === 1 ? "statement" : "statements"}</span>
             </div>
 
             <div className="claimField">
@@ -312,7 +332,7 @@ export default function DecisionWorkbench() {
                   <span className="claimOrdinal">C{String(index + 1).padStart(2, "0")}</span>
                   <span className={`statusGlyph status_${claim.status}`} aria-hidden="true" />
                   <span className="claimText">{claim.text}</span>
-                  <span className="claimMeasure">{claim.evidenceIds.length} evidence</span>
+                  <span className="claimMeasure">{claim.evidenceIds.length} linked {claim.evidenceIds.length === 1 ? "excerpt" : "excerpts"}</span>
                   <span className="claimState">{statusLabels[claim.status]}</span>
                 </button>
               ))}
@@ -321,32 +341,32 @@ export default function DecisionWorkbench() {
         ) : (
           <div className="fieldEmpty">
             <div className="fieldEmptyRule" />
-            <p>Enter the case material. State the question. The claim field will expose what is asserted, what supports it, and what remains unresolved.</p>
+            <p>Enter the case material. State the question. Choose “Check the evidence.” The app will break the recommendation into key statements, connect each one to its sources, and show what holds up, what conflicts, and what is still missing.</p>
           </div>
         )}
       </section>
 
-      <aside className="inspectionRail" aria-label="Selected claim examination">
+      <aside className="inspectionRail" aria-label="Selected statement details">
         <div className="railHeading">
           <span className="indexMark">04</span>
-          <h2>EXAMINATION</h2>
+          <h2>STATEMENT DETAILS</h2>
         </div>
 
         {selectedClaim && examination ? (
           <div className="claimInspection">
             <div className="inspectionLead">
-              <span>{selectedClaim.criticality}</span>
+              <span>{criticalityLabels[selectedClaim.criticality]}</span>
               <strong>{statusLabels[selectedClaim.status]}</strong>
             </div>
             <h3>{selectedClaim.text}</h3>
 
             <section className="inspectionSection">
-              <h4>REASON GIVEN</h4>
+              <h4>WHY THIS WAS FLAGGED</h4>
               <p>{selectedClaim.rationale}</p>
             </section>
 
             <section className="inspectionSection">
-              <h4>EVIDENCE LINKED</h4>
+              <h4>LINKED SOURCES</h4>
               {selectedEvidence.length ? selectedEvidence.map(item => {
                 const source = examination.sources.find(sourceItem => sourceItem.id === item.sourceId);
                 const chunk = examination.chunks.find(chunkItem => chunkItem.id === item.chunkId);
@@ -357,14 +377,14 @@ export default function DecisionWorkbench() {
                       {source?.canonicalUrl ? <a href={source.canonicalUrl} target="_blank" rel="noreferrer">{origin}</a> : origin}
                     </div>
                     <p>{item.excerpt}</p>
-                    <span>retrieval relevance {item.relevance}</span>
+                    <span>Source match {Math.round(item.relevance * 100)}%</span>
                   </div>
                 );
-              }) : <p>No registered source currently supports or contradicts this claim.</p>}
+              }) : <p>No linked source currently supports or challenges this statement.</p>}
             </section>
 
             <section className="inspectionSection">
-              <h4>MANUAL CLASSIFICATION</h4>
+              <h4>CHANGE THIS ASSESSMENT</h4>
               <div className="statusMatrix">
                 {(Object.keys(statusLabels) as ClaimStatus[]).map(item => (
                   <button type="button" key={item} className={selectedClaim.status === item ? "statusChoice active" : "statusChoice"} onClick={() => setManualStatus(item)}>
@@ -372,23 +392,23 @@ export default function DecisionWorkbench() {
                   </button>
                 ))}
               </div>
-              {selectedClaim.humanOverride ? <p className="overrideMark">Human override recorded.</p> : null}
+              {selectedClaim.humanOverride ? <p className="overrideMark">Your assessment is saved.</p> : null}
             </section>
 
             <section className="inspectionSection challengeSection">
-              <button type="button" className="challengeAction" onClick={applyChallenge} disabled={busy === "challenge"}>{busy === "challenge" ? "Testing the claim" : "Challenge this claim"}</button>
+              <button type="button" className="challengeAction" onClick={applyChallenge} disabled={busy === "challenge"}>{busy === "challenge" ? "Stress-testing" : "Stress-test this statement"}</button>
               {challenge ? (
                 <div className="challengeResult">
-                  <strong>{challenge.result.replaceAll("_", " ")}</strong>
+                  <strong>{challengeLabels[challenge.result]}</strong>
                   {challenge.weaknesses.map(item => <p key={item}>{item}</p>)}
-                  {challenge.missingEvidence.map(item => <p key={item}>Missing: {item}</p>)}
-                  {challenge.alternativeExplanations.map(item => <p key={item}>Alternative: {item}</p>)}
+                  {challenge.missingEvidence.map(item => <p key={item}>Still needed: {item}</p>)}
+                  {challenge.alternativeExplanations.map(item => <p key={item}>Another explanation: {item}</p>)}
                 </div>
               ) : null}
             </section>
           </div>
         ) : (
-          <p className="railVoid">Select one claim to expose its evidence chain.</p>
+          <p className="railVoid">Select a statement to see why it was assessed that way and which sources are linked to it.</p>
         )}
       </aside>
     </main>
