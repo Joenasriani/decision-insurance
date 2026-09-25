@@ -61,6 +61,7 @@ export default function DecisionWorkbench() {
   const [notice, setNotice] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const hasPrimarySource = sources.some(source => source.role === "PRIMARY_INPUT_REPORT");
   const selectedClaim = examination?.claims.find(claim => claim.id === selectedClaimId) ?? examination?.claims[0] ?? null;
   const selectedEvidence = useMemo(() => {
     if (!examination || !selectedClaim) return [];
@@ -69,11 +70,7 @@ export default function DecisionWorkbench() {
   }, [examination, selectedClaim]);
 
   function pushSource(next: SourceRecord) {
-    setSources(current => {
-      const hasPrimary = current.some(item => item.role === "PRIMARY_INPUT_REPORT");
-      if (!hasPrimary && next.role !== "PRIMARY_INPUT_REPORT") next.role = "PRIMARY_INPUT_REPORT";
-      return [...current, next];
-    });
+    setSources(current => [...current, next]);
     setNotice(null);
   }
 
@@ -134,7 +131,8 @@ export default function DecisionWorkbench() {
     setBusy("files");
     setNotice(null);
     try {
-      for (const file of files) {
+      for (const [index, file] of files.entries()) {
+        const sourceRole: SourceRole = role === "PRIMARY_INPUT_REPORT" && index > 0 ? "RESEARCH_SOURCE" : role;
         const form = new FormData();
         form.set("file", file);
         const response = await fetch("/api/ingest", { method: "POST", body: form });
@@ -144,15 +142,15 @@ export default function DecisionWorkbench() {
           id: sourceId(`${file.name}:${file.size}:${file.lastModified}`),
           label: data.label || file.name,
           kind: data.kind,
-          role,
+          role: sourceRole,
           extractionMethod: "NATIVE",
           extractionStatus: data.extractionStatus,
           text: data.text,
           pageCount: data.pageCount,
           notes: data.notes
         });
-        if (role === "PRIMARY_INPUT_REPORT") setRole("RESEARCH_SOURCE");
       }
+      if (role === "PRIMARY_INPUT_REPORT") setRole("RESEARCH_SOURCE");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "A file could not be read.");
     } finally {
@@ -168,6 +166,10 @@ export default function DecisionWorkbench() {
     }
     if (!sources.length) {
       setNotice("Add at least one report, recommendation, or source first.");
+      return;
+    }
+    if (!hasPrimarySource) {
+      setNotice("Choose one item as the main report or recommendation. That is what the app will break into statements to check.");
       return;
     }
     setBusy("examine");
@@ -256,13 +258,20 @@ export default function DecisionWorkbench() {
 
         <div className="firstRunGuide">
           <strong>Start here</strong>
-          <p>Add the report or recommendation you want to check. Then add research or sources that may support or challenge it.</p>
+          <p>Add the report or recommendation you want to check. Then add research or sources that may support or challenge it. The app never silently changes the type you selected.</p>
         </div>
 
         <div className="rolePrompt">What are you adding?</div>
         <div className="roleMatrix" aria-label="What kind of material are you adding?">
           {(["PRIMARY_INPUT_REPORT", "RESEARCH_SOURCE", "COUNTER_EVIDENCE"] as SourceRole[]).map(item => (
-            <button key={item} type="button" className={role === item ? "roleChoice active" : "roleChoice"} onClick={() => setRole(item)}>
+            <button
+              key={item}
+              type="button"
+              className={role === item ? "roleChoice active" : "roleChoice"}
+              onClick={() => setRole(item)}
+              disabled={item === "PRIMARY_INPUT_REPORT" && hasPrimarySource}
+              title={item === "PRIMARY_INPUT_REPORT" && hasPrimarySource ? "Remove the current main report to replace it." : undefined}
+            >
               {roleLabels[item]}
             </button>
           ))}
@@ -341,7 +350,7 @@ export default function DecisionWorkbench() {
         ) : (
           <div className="fieldEmpty">
             <div className="fieldEmptyRule" />
-            <p>Enter the case material. State the question. Choose “Check the evidence.” The app will break the recommendation into key statements, connect each one to its sources, and show what holds up, what conflicts, and what is still missing.</p>
+            <p>Add the main report or recommendation, add any useful research, then tell the app what decision you are trying to make. Choose “Check the evidence” to see what is supported, what conflicts, and what still needs proof.</p>
           </div>
         )}
       </section>
@@ -377,7 +386,7 @@ export default function DecisionWorkbench() {
                       {source?.canonicalUrl ? <a href={source.canonicalUrl} target="_blank" rel="noreferrer">{origin}</a> : origin}
                     </div>
                     <p>{item.excerpt}</p>
-                    <span>Source match {Math.round(item.relevance * 100)}%</span>
+                    <span>Linked source excerpt</span>
                   </div>
                 );
               }) : <p>No linked source currently supports or challenges this statement.</p>}
@@ -385,6 +394,7 @@ export default function DecisionWorkbench() {
 
             <section className="inspectionSection">
               <h4>CHANGE THIS ASSESSMENT</h4>
+              <p className="sectionHelp">Change this only if you have checked the linked sources yourself.</p>
               <div className="statusMatrix">
                 {(Object.keys(statusLabels) as ClaimStatus[]).map(item => (
                   <button type="button" key={item} className={selectedClaim.status === item ? "statusChoice active" : "statusChoice"} onClick={() => setManualStatus(item)}>
@@ -396,6 +406,7 @@ export default function DecisionWorkbench() {
             </section>
 
             <section className="inspectionSection challengeSection">
+              <p className="sectionHelp">Looks for weaknesses, missing support, conflicting material, and other plausible explanations.</p>
               <button type="button" className="challengeAction" onClick={applyChallenge} disabled={busy === "challenge"}>{busy === "challenge" ? "Stress-testing" : "Stress-test this statement"}</button>
               {challenge ? (
                 <div className="challengeResult">
