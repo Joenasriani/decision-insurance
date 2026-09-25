@@ -16,16 +16,16 @@ function privateAddress(ip: string) {
 
 async function validatePublicUrl(value: string | URL) {
   const url = value instanceof URL ? value : new URL(value);
-  if (!["http:", "https:"].includes(url.protocol)) throw new Error("Only public web addresses are accepted.");
-  if (!url.hostname || url.username || url.password) throw new Error("The web address is not accepted.");
-  if (["localhost", "0.0.0.0"].includes(url.hostname.toLowerCase())) throw new Error("Local addresses are not accepted.");
+  if (!["http:", "https:"].includes(url.protocol)) throw new Error("Enter a normal public http or https webpage address.");
+  if (!url.hostname || url.username || url.password) throw new Error("This webpage address cannot be opened. Check the address and try again.");
+  if (["localhost", "0.0.0.0"].includes(url.hostname.toLowerCase())) throw new Error("For security, local or private network addresses cannot be opened.");
 
   if (net.isIP(url.hostname)) {
-    if (privateAddress(url.hostname)) throw new Error("Private network addresses are not accepted.");
+    if (privateAddress(url.hostname)) throw new Error("For security, local or private network addresses cannot be opened.");
   } else {
     const records = await dns.lookup(url.hostname, { all: true });
     if (!records.length || records.some(record => privateAddress(record.address))) {
-      throw new Error("The address resolves to a private network.");
+      throw new Error("For security, this address points to a private network and cannot be opened.");
     }
   }
   return url;
@@ -49,11 +49,11 @@ async function fetchPublicSource(initial: URL, signal: AbortSignal) {
     }
 
     const location = response.headers.get("location");
-    if (!location) throw new Error("The source redirected without a destination.");
-    if (redirectCount === 5) throw new Error("The source exceeded the redirect limit.");
+    if (!location) throw new Error("The website redirected to an invalid destination.");
+    if (redirectCount === 5) throw new Error("The website redirected too many times.");
     current = new URL(location, current);
   }
-  throw new Error("The source could not be reached.");
+  throw new Error("The webpage could not be reached.");
 }
 
 function compactText(value: string) {
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
     const requested = await validatePublicUrl(String(body.url ?? ""));
     const { response, finalUrl } = await fetchPublicSource(requested, controller.signal);
 
-    if (!response.ok) throw new Error(`Source returned HTTP ${response.status}.`);
+    if (!response.ok) throw new Error(`The website returned an error (${response.status}).`);
     const contentType = response.headers.get("content-type") ?? "";
     if (!contentType.includes("text/html") && !contentType.includes("text/plain") && !contentType.includes("application/xhtml+xml")) {
       throw new Error("This address does not return a readable webpage.");
@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
       $(el).after("\n\n");
     });
     const text = compactText(root.text());
-    if (text.length < 120) throw new Error("The webpage did not expose enough readable research text.");
+    if (text.length < 120) throw new Error("The webpage did not contain enough readable text. Try another page, upload a file, or paste the relevant text.");
 
     let canonicalUrl = finalUrl.toString();
     if (canonical) {
