@@ -43,6 +43,14 @@ const challengeLabels: Record<Examination["challenges"][number]["result"], strin
   UNRESOLVED: "Needs more evidence"
 };
 
+const kindLabels: Record<SourceRecord["kind"], string> = {
+  TEXT: "Text",
+  PDF: "PDF",
+  DOCX: "Word document",
+  WEBPAGE: "Webpage",
+  MARKDOWN: "Markdown"
+};
+
 function sourceId(seed: string) {
   let hash = 5381;
   for (const ch of seed) hash = (hash * 33) ^ ch.charCodeAt(0);
@@ -203,7 +211,7 @@ export default function DecisionWorkbench() {
         body: JSON.stringify({ examination, claimId: selectedClaim.id })
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "The claim test did not complete.");
+      if (!response.ok) throw new Error(data.error || "The stress-test could not be completed.");
       const next = {
         ...examination,
         version: examination.version + 1,
@@ -213,7 +221,7 @@ export default function DecisionWorkbench() {
       if (data.limitation) setNotice("The deeper AI stress-test was unavailable, so a basic consistency check was used instead.");
       await saveExamination(next);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "The claim test did not complete.");
+      setNotice(error instanceof Error ? error.message : "The stress-test could not be completed.");
     } finally {
       setBusy(null);
     }
@@ -246,7 +254,7 @@ export default function DecisionWorkbench() {
         </div>
         <div className="mastState">
           <span>{sources.length} {sources.length === 1 ? "source" : "sources"}</span>
-          <span>{examination ? `review ${examination.version}` : "not checked yet"}</span>
+          <span>{examination ? "evidence checked" : "not checked yet"}</span>
         </div>
       </header>
 
@@ -303,7 +311,7 @@ export default function DecisionWorkbench() {
               <div className="sourceMatter">
                 <strong>{source.label}</strong>
                 <span>{roleLabels[source.role]}</span>
-                <span>{source.kind}{source.pageCount ? `  ${source.pageCount} pages` : ""}</span>
+                <span>{kindLabels[source.kind]}{source.pageCount ? `  ·  ${source.pageCount} pages` : ""}</span>
               </div>
               <button type="button" className="erase" onClick={() => removeSource(source.id)} aria-label={`Remove ${source.label}`}>×</button>
             </div>
@@ -338,7 +346,7 @@ export default function DecisionWorkbench() {
             <div className="claimField">
               {examination.claims.map((claim, index) => (
                 <button key={claim.id} type="button" className={selectedClaim?.id === claim.id ? "claimStratum selected" : "claimStratum"} onClick={() => setSelectedClaimId(claim.id)}>
-                  <span className="claimOrdinal">C{String(index + 1).padStart(2, "0")}</span>
+                  <span className="claimOrdinal">{String(index + 1).padStart(2, "0")}</span>
                   <span className={`statusGlyph status_${claim.status}`} aria-hidden="true" />
                   <span className="claimText">{claim.text}</span>
                   <span className="claimMeasure">{claim.evidenceIds.length} linked {claim.evidenceIds.length === 1 ? "excerpt" : "excerpts"}</span>
@@ -370,7 +378,7 @@ export default function DecisionWorkbench() {
             <h3>{selectedClaim.text}</h3>
 
             <section className="inspectionSection">
-              <h4>WHY THIS WAS FLAGGED</h4>
+              <h4>WHY THIS ASSESSMENT</h4>
               <p>{selectedClaim.rationale}</p>
             </section>
 
