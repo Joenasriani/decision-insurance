@@ -94,7 +94,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ challenge: challengeClaim(examination, parsed.claimId), mode: "deterministic" });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "The claim could not be challenged.";
+    const message = error instanceof z.ZodError
+      ? "This statement could not be stress-tested because part of the saved review is incomplete."
+      : "The stress-test could not be completed. Try the evidence check again, then retry this statement.";
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }
