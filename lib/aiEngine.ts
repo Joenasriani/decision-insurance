@@ -76,7 +76,9 @@ If a required evidential dimension is absent, return MATERIAL_GAP.
 If linked evidence materially conflicts with the claim, return CONTRADICTED.
 If the supplied structure does not permit a justified result, return UNRESOLVED.
 Do not expose private chain of thought.
-Return concise observable findings only.`;
+Return concise observable findings only.
+Write weaknesses, missing evidence, and alternative explanations in plain language for a first-time non-technical user.
+Avoid interface-facing jargon such as retrieval, corpus, evidence ID, decomposition, proposition, inference distance, or epistemic.`;
 
 const extractionSystem = `You are the claim decomposition stage inside Decision Insurance.
 Follow these rules strictly.
@@ -104,7 +106,10 @@ UNKNOWN means available information is insufficient or ambiguous.
 Preserve unknowns.
 Do not make the business decision.
 Do not expose private chain of thought.
-Rationale must be a short observable justification summary.`;
+Rationale must be a short observable justification summary.
+Write the rationale in plain language for a first-time non-technical user.
+Prefer wording such as "The linked sources support only part of this statement" over analyst or software terminology.
+Avoid interface-facing jargon such as retrieval, corpus, evidence ID, decomposition, proposition, inference distance, or epistemic.`;
 
 export async function examineWithModel(question: string, sources: SourceRecord[]): Promise<Examination> {
   const model = process.env.AI_MODEL || "openai/gpt-5.4";
