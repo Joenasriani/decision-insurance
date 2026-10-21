@@ -126,6 +126,19 @@ function isAssumptionText(text: string) {
   return /\b(assume|assuming|likely|probably|expected|presume|should remain|will continue|implies)\b/i.test(text);
 }
 
+export function calculateReadiness(claims: ClaimRecord[]): Examination["readiness"] {
+  const criticalContradiction = claims.some(c => c.criticality === "CRITICAL" && c.status === "CONTRADICTED");
+  const criticalGap = claims.some(c => c.criticality === "CRITICAL" && c.status !== "SUPPORTED");
+  const importantGap = claims.some(c => c.criticality === "IMPORTANT" && c.status !== "SUPPORTED");
+  const anyGap = claims.some(c => c.status !== "SUPPORTED");
+  return {
+    label: criticalContradiction ? "CRITICAL_CONTRADICTION_PRESENT" :
+      criticalGap ? "INSUFFICIENT_EVIDENCE" :
+      importantGap || anyGap ? "MATERIAL_GAPS_REMAIN" : "STRONG_EVIDENCE_COVERAGE",
+    criticalClaimIds: claims.filter(c => c.criticality === "CRITICAL" && c.status !== "SUPPORTED").map(c => c.id)
+  };
+}
+
 export function examineLocally(question: string, sources: SourceRecord[]): Examination {
   const chunks = chunkSources(sources);
   const primary = sources.find(s => s.role === "PRIMARY_INPUT_REPORT") ?? sources[0];
@@ -207,20 +220,7 @@ export function examineLocally(question: string, sources: SourceRecord[]): Exami
     });
   });
 
-  const criticalContradiction = claims.some(c => c.criticality === "CRITICAL" && c.status === "CONTRADICTED");
-  const criticalGap = claims.some(c => c.criticality === "CRITICAL" && c.status !== "SUPPORTED");
-  const importantGap = claims.some(c => c.criticality === "IMPORTANT" && c.status !== "SUPPORTED");
-
-  const readiness: Examination["readiness"] = {
-    label: criticalContradiction
-      ? "CRITICAL_CONTRADICTION_PRESENT"
-      : criticalGap
-        ? "INSUFFICIENT_EVIDENCE"
-        : importantGap
-          ? "MATERIAL_GAPS_REMAIN"
-          : "STRONG_EVIDENCE_COVERAGE",
-    criticalClaimIds: claims.filter(c => c.criticality === "CRITICAL" && c.status !== "SUPPORTED").map(c => c.id)
-  };
+  const readiness = calculateReadiness(claims);
 
   return {
     id: stableId("EX", `${question}:${Date.now()}`),
