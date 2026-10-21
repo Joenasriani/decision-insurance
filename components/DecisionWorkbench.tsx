@@ -249,6 +249,20 @@ export default function DecisionWorkbench() {
     await saveExamination(next);
   }
 
+  async function setManualCriticality(criticality: Examination["claims"][number]["criticality"]) {
+    if (!examination || !selectedClaim) return;
+    const claims = examination.claims.map(c => c.id === selectedClaim.id ? { ...c, criticality, humanOverride: true } : c);
+    const criticalConflict = claims.some(c => c.criticality === "CRITICAL" && c.status === "CONTRADICTED");
+    const criticalGap = claims.some(c => c.criticality === "CRITICAL" && c.status !== "SUPPORTED");
+    const importantGap = claims.some(c => c.criticality === "IMPORTANT" && c.status !== "SUPPORTED");
+    const next: Examination = { ...examination, version: examination.version + 1, claims, readiness: {
+      label: criticalConflict ? "CRITICAL_CONTRADICTION_PRESENT" : criticalGap ? "INSUFFICIENT_EVIDENCE" : importantGap ? "MATERIAL_GAPS_REMAIN" : "STRONG_EVIDENCE_COVERAGE",
+      criticalClaimIds: claims.filter(c => c.criticality === "CRITICAL" && c.status !== "SUPPORTED").map(c => c.id)
+    } };
+    setExamination(next);
+    await saveExamination(next);
+  }
+
   function removeSource(id: string) {
     setSources(current => current.filter(source => source.id !== id));
   }
@@ -387,6 +401,13 @@ export default function DecisionWorkbench() {
               <strong>{statusLabels[selectedClaim.status]}</strong>
             </div>
             <h3>{selectedClaim.text}</h3>
+            <label htmlFor="claim-criticality">Human review of claim importance</label>
+            <select id="claim-criticality" value={selectedClaim.criticality} onChange={event => void setManualCriticality(event.target.value as Examination["claims"][number]["criticality"])}>
+              <option value="CRITICAL">Critical</option>
+              <option value="IMPORTANT">Important</option>
+              <option value="SUPPORTING">Supporting</option>
+            </select>
+            <p>Review the conservative default against the decision context.</p>
 
             <section className="inspectionSection">
               <h4>WHY THIS ASSESSMENT</h4>
