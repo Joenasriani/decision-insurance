@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const ts = require("typescript");
+assert.equal(typeof ts.transpileModule, "function", "TypeScript transpiler must be available");
 const Module = require("node:module");
 const path = require("node:path");
 const file = path.join(process.cwd(), "lib/engine.ts");
