@@ -18,5 +18,6 @@ jobs:
         with:
           node-version: 22
       - run: npm install
+      - run: node --test tests/*.cjs
       - run: npm run typecheck
       - run: npm run build
