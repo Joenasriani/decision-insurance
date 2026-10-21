@@ -56,8 +56,8 @@ export async function POST(request: NextRequest) {
         label: name,
         kind: "DOCX",
         text: clean(result.value),
-        extractionStatus: "COMPLETE",
-        notes: result.messages.map(message => message.message).slice(0, 8)
+        extractionStatus: "PARTIAL",
+        notes: ["Raw-text DOCX extraction does not verify figures, tables, or layout completeness.", ...result.messages.map(message => message.message).slice(0, 7)]
       });
     }
 
