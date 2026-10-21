@@ -91,6 +91,7 @@ export default function DecisionWorkbench() {
       label: role === "PRIMARY_INPUT_REPORT" ? "Pasted report or recommendation" : "Pasted source",
       kind: "TEXT",
       role,
+      provenanceStatus: "USER_SUPPLIED",
       extractionMethod: "PASTED",
       extractionStatus: "COMPLETE",
       text
@@ -120,6 +121,7 @@ export default function DecisionWorkbench() {
         locator: webAddress.trim(),
         canonicalUrl: data.canonicalUrl,
         retrievedAt: data.retrievedAt,
+        provenanceStatus: "UNVERIFIED",
         extractionMethod: "WEB_FETCH",
         extractionStatus: "COMPLETE",
         text: data.text
@@ -151,6 +153,7 @@ export default function DecisionWorkbench() {
           label: data.label || file.name,
           kind: data.kind,
           role: sourceRole,
+          provenanceStatus: "USER_SUPPLIED",
           extractionMethod: "NATIVE",
           extractionStatus: data.extractionStatus,
           text: data.text,
@@ -232,7 +235,15 @@ export default function DecisionWorkbench() {
     const next: Examination = {
       ...examination,
       version: examination.version + 1,
-      claims: examination.claims.map(claim => claim.id === selectedClaim.id ? { ...claim, status, humanOverride: true } : claim)
+      claims: examination.claims.map(claim => claim.id === selectedClaim.id ? { ...claim, status, humanOverride: true } : claim),
+      readiness: (() => {
+        const claims = examination.claims.map(claim => claim.id === selectedClaim.id ? { ...claim, status } : claim);
+        const criticalConflict = claims.some(c => c.criticality === "CRITICAL" && c.status === "CONTRADICTED");
+        const criticalGap = claims.some(c => c.criticality === "CRITICAL" && c.status !== "SUPPORTED");
+        const importantGap = claims.some(c => c.criticality === "IMPORTANT" && c.status !== "SUPPORTED");
+        return { label: criticalConflict ? "CRITICAL_CONTRADICTION_PRESENT" as const : criticalGap ? "INSUFFICIENT_EVIDENCE" as const : importantGap ? "MATERIAL_GAPS_REMAIN" as const : "STRONG_EVIDENCE_COVERAGE" as const,
+          criticalClaimIds: claims.filter(c => c.criticality === "CRITICAL" && c.status !== "SUPPORTED").map(c => c.id) };
+      })()
     };
     setExamination(next);
     await saveExamination(next);
