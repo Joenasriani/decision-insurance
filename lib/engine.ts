@@ -28,31 +28,32 @@ export function chunkSources(sources: SourceRecord[]): SourceChunk[] {
   for (const source of sources) {
     const segments: Array<{ text: string; page?: number }> = [];
     if (source.kind === "PDF") {
-      const marker = /([\\s\\S]*?)\\[\\[PAGE (\\d+) OF (\\d+)\\]\\]/g;
+      // pdf-parse inserts each marker after its corresponding page.
+      const marker = /([\s\S]*?)\[\[PAGE (\d+) OF (\d+)\]\]/g;
       let match: RegExpExecArray | null;
       let lastIndex = 0;
       let expectedPage = 1;
       let valid = true;
+      const totalPages = source.pageCount;
       while ((match = marker.exec(source.text)) !== null) {
         const page = Number(match[2]);
         const total = Number(match[3]);
-        if (page !== expectedPage || (source.pageCount !== undefined && total !== source.pageCount)) {
+        if (page !== expectedPage || (totalPages !== undefined && total !== totalPages)) {
           valid = false;
           break;
         }
         const text = match[1].trim();
         if (text) segments.push({ text, page });
-        expectedPage += 1;
+        expectedPage++;
         lastIndex = marker.lastIndex;
       }
       const tail = source.text.slice(lastIndex).trim();
-      if (valid && expectedPage > 1 && tail && (source.pageCount === undefined || expectedPage <= source.pageCount)) {
-        segments.push({ text: tail, page: expectedPage });
-      } else if (valid && expectedPage === 1 && tail) {
-        segments.push({ text: tail });
-      } else if (!valid) {
+      // Any unmarked trailing text is not safely attributable to a page.
+      if (valid && tail) segments.push({ text: tail });
+      if (!valid || (totalPages !== undefined && expectedPage - 1 !== totalPages)) {
         segments.length = 0;
-        segments.push({ text: source.text.replace(/\\[\\[PAGE \\d+ OF \\d+\\]\\]/g, "").trim() });
+        const plain = source.text.replace(/\[\[PAGE \d+ OF \d+\]\]/g, "").trim();
+        if (plain) segments.push({ text: plain });
       }
     } else {
       segments.push({ text: source.text });
@@ -125,11 +126,6 @@ function isAssumptionText(text: string) {
   return /\b(assume|assuming|likely|probably|expected|presume|should remain|will continue|implies)\b/i.test(text);
 }
 
-function looksContradictory(claim: string, evidence: string) {
-  const neg = /\b(no|not|never|decline|decrease|failed|failure|risk|contrary|however|despite|but)\b/i.test(evidence);
-  return neg && overlap(claim, evidence) > 0.16;
-}
-
 export function examineLocally(question: string, sources: SourceRecord[]): Examination {
   const chunks = chunkSources(sources);
   const primary = sources.find(s => s.role === "PRIMARY_INPUT_REPORT") ?? sources[0];
@@ -145,7 +141,7 @@ export function examineLocally(question: string, sources: SourceRecord[]): Exami
   selected.forEach((text, i) => {
     const claimId = stableId("C", text, i);
     const ranked = chunks
-      .filter(c => c.sourceId !== primary?.id || c.text !== text)
+      .filter(c => c.sourceId !== primary?.id)
       .map(chunk => ({ chunk, score: overlap(text, chunk.text) }))
       .filter(x => x.score > 0.08)
       .sort((a, b) => b.score - a.score)
