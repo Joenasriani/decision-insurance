@@ -27,13 +27,23 @@ export async function POST(request: NextRequest) {
           parser.getInfo({ parsePageInfo: true })
         ]);
         const text = clean(textResult.text);
+        const markers = [...text.matchAll(/\[\[PAGE (\d+) OF (\d+)\]\]/g)];
+        const total = infoResult.total;
+        const markersValid = Number.isInteger(total) && total > 0 &&
+          markers.length === total &&
+          markers.every((m, i) => Number(m[1]) === i + 1 && Number(m[2]) === total);
+        const readable = text.replace(/\[\[PAGE \d+ OF \d+\]\]/g, "").trim();
+        const notes: string[] = [];
+        if (!markersValid) notes.push("Page attribution could not be verified; page references must not be trusted.");
+        if (readable.length <= 100) notes.push("This PDF contains very little selectable text. Try another copy or paste the relevant text manually.");
+        notes.push("Extraction is not independently checked against visual page content, tables or figures.");
         return NextResponse.json({
           label: name,
           kind: "PDF",
           text,
-          pageCount: infoResult.total,
-          extractionStatus: text.length > 100 ? "COMPLETE" : "PARTIAL",
-          notes: text.length > 100 ? [] : ["This PDF contains very little selectable text. Try another copy or paste the relevant text manually."]
+          pageCount: total,
+          extractionStatus: "PARTIAL",
+          notes
         });
       } finally {
         await parser.destroy();
