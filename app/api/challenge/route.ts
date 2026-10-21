@@ -75,7 +75,7 @@ const requestSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const parsed = requestSchema.parse(await request.json());
-    const examination = parsed.examination as Examination;
+    const examination = parsed.examination as unknown as Examination; // Validated subset; complete Examination schema remains a follow-up.
     const gatewayReady = Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || process.env.VERCEL);
 
     if (gatewayReady) {
