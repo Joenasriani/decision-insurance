@@ -18,6 +18,20 @@ jobs:
         with:
           node-version: 22
       - run: npm install
+      - name: Record resolved dependency versions
+        run: npm ls --depth=0
+      - name: Audit dependency advisories (diagnostic, non-gating)
+        run: |
+          npm audit --json > npm-audit.json || true
+          node -e 'const a=require("./npm-audit.json"); console.log(JSON.stringify({metadata:a.metadata?.vulnerabilities, advisories:Object.entries(a.vulnerabilities||{}).map(([name,v])=>({name,severity:v.severity,isDirect:v.isDirect,via:v.via.map(x=>typeof x==="string"?x:x.url||x.name),fixAvailable:v.fixAvailable}))},null,2))'
+      - name: Upload private dependency evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-evidence
+          path: |
+            npm-audit.json
+            package-lock.json
+          retention-days: 7
       - run: node --test tests/*.cjs
       - run: npm run typecheck
       - run: npm run build
