@@ -1,3 +1,5 @@
+const {test} = require("node:test");
+const assert = require("node:assert/strict");
 require("tsx/cjs");
 const {examineLocally,chunkSources} = require("../lib/engine.ts");
 
