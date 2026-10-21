@@ -228,7 +228,7 @@ export async function examineWithModel(question: string, sources: SourceRecord[]
   });
 
   const criticalContradiction = claims.some(claim => claim.criticality === "CRITICAL" && claim.status === "CONTRADICTED");
-  const criticalGap = claims.some(claim => claim.criticality === "CRITICAL" && ["UNSUPPORTED", "UNKNOWN", "ASSUMPTION"].includes(claim.status));
+  const criticalGap = claims.some(claim => claim.criticality === "CRITICAL" && claim.status !== "SUPPORTED");
   const importantGap = claims.some(claim => claim.criticality === "IMPORTANT" && claim.status !== "SUPPORTED");
 
   return {
@@ -248,7 +248,7 @@ export async function examineWithModel(question: string, sources: SourceRecord[]
       label: criticalContradiction ? "CRITICAL_CONTRADICTION_PRESENT" : criticalGap ? "INSUFFICIENT_EVIDENCE" : importantGap ? "MATERIAL_GAPS_REMAIN" : "STRONG_EVIDENCE_COVERAGE",
       criticalClaimIds: claims.filter(claim => claim.criticality === "CRITICAL" && claim.status !== "SUPPORTED").map(claim => claim.id)
     },
-    limitations: []
+    limitations: ["Model classifications and evidence links require independent semantic verification; evidence ID validation does not prove entailment.", "Challenge examines registered evidence only; it does not independently retrieve counterevidence."]
   };
 }
 
