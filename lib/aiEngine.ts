@@ -140,6 +140,11 @@ export async function examineWithModel(question: string, sources: SourceRecord[]
         excerpt: item.chunk.text.slice(0, 900),
         normalizedFact: item.chunk.text.slice(0, 320),
         relevance: Number(item.score.toFixed(3)),
+        retrievalDate: new Date().toISOString(),
+        retrievalMethod: "LEXICAL",
+        sourceDate: sources.find(source => source.id === item.chunk.sourceId)?.sourceDate,
+        provenanceStatus: sources.find(source => source.id === item.chunk.sourceId)?.provenanceStatus ?? "UNVERIFIED",
+        strength: "UNASSESSED",
         supportsClaimIds: [],
         contradictsClaimIds: []
       });
