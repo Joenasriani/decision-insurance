@@ -56,3 +56,32 @@ test("manual criticality changes recompute readiness without falsely certifying 
 test("empty claim sets cannot be described as strong evidence coverage",()=>{
  assert.deepEqual(calculateReadiness([]),{label:"INSUFFICIENT_EVIDENCE",criticalClaimIds:[]});
 });
+
+test("PDF markers with duplicate or out-of-order pages never establish page provenance",()=>{
+ for(const body of [
+  "Alpha. [[PAGE 1 OF 2]] Beta. [[PAGE 1 OF 2]]",
+  "Alpha. [[PAGE 2 OF 2]] Beta. [[PAGE 1 OF 2]]",
+  "Alpha. [[PAGE 1 OF 2]] Beta. [[PAGE 2 OF 3]]"
+ ]) {
+  const chunks=chunkSources([source("PX","RESEARCH_SOURCE",body,{kind:"PDF",pageCount:2})]);
+  assert.ok(chunks.length>0);
+  assert.ok(chunks.every(c=>c.pageStart===undefined && c.pageEnd===undefined));
+ }
+});
+test("supporting unresolved claims block strong coverage even if critical claims are supported",()=>{
+ const claims=[{id:"C1",status:"SUPPORTED",criticality:"CRITICAL"},{id:"C2",status:"UNKNOWN",criticality:"SUPPORTING"}];
+ assert.equal(calculateReadiness(claims).label,"MATERIAL_GAPS_REMAIN");
+});
+test("critical contradiction takes priority over other unresolved claims",()=>{
+ const claims=[{id:"C1",status:"CONTRADICTED",criticality:"CRITICAL"},{id:"C2",status:"UNKNOWN",criticality:"IMPORTANT"}];
+ assert.equal(calculateReadiness(claims).label,"CRITICAL_CONTRADICTION_PRESENT");
+ assert.deepEqual(calculateReadiness(claims).criticalClaimIds,["C1"]);
+});
+test("primary source is never independent corroboration even with identical wording",()=>{
+ const statement="The analysis predicts an annual revenue increase of twenty percent next year.";
+ const report=source("P","PRIMARY_INPUT_REPORT",statement);
+ const secondary=source("E","RESEARCH_SOURCE",statement);
+ const result=examineLocally("Is this reliable?",[report,secondary]);
+ assert.ok(result.evidence.every(e=>e.sourceId!=="P"));
+ assert.ok(result.claims.every(c=>c.status!=="SUPPORTED"));
+});
