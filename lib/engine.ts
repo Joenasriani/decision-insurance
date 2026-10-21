@@ -147,7 +147,6 @@ export function examineLocally(question: string, sources: SourceRecord[]): Exami
 
     ranked.forEach((item, rIndex) => {
       const evidenceId = stableId("E", `${claimId}:${item.chunk.id}`, rIndex);
-      const contradicts = false; // Lexical negation is not proof of contradiction.
       const record: EvidenceRecord = {
         id: evidenceId,
         sourceId: item.chunk.sourceId,
@@ -161,19 +160,11 @@ export function examineLocally(question: string, sources: SourceRecord[]): Exami
         provenanceStatus: sources.find(source => source.id === item.chunk.sourceId)?.provenanceStatus ?? "UNVERIFIED",
         strength: "UNASSESSED",
         supportsClaimIds: [], // Retrieval similarity alone does not establish support.
-        contradictsClaimIds: contradicts ? [claimId] : []
+        contradictsClaimIds: []
       };
       evidence.push(record);
       evidenceIds.push(evidenceId);
-      if (contradicts) {
-        const contradictionId = stableId("X", evidenceId);
-        contradictions.push({
-          id: contradictionId,
-          description: "Retrieved material conflicts with the claim wording or direction.",
-          claimId,
-          evidenceIds: [evidenceId],
-          severity: i < 3 ? "MATERIAL" : "MINOR"
-        });
+    });
         contradictionIds.push(contradictionId);
       }
     });
@@ -184,14 +175,9 @@ export function examineLocally(question: string, sources: SourceRecord[]): Exami
       assumptionIds.push(assumptionId);
     }
 
-    let status: ClaimRecord["status"] = "UNKNOWN";
-    if (contradictionIds.length) status = "CONTRADICTED";
-    else if (assumptionIds.length && evidenceIds.length < 2) status = "ASSUMPTION";
-    // Local retrieval never automatically establishes factual support.
-    else if (ranked[0]?.score >= 0.18) status = "UNKNOWN";
-    else if (ranked.length) status = "UNKNOWN";
+    const status: ClaimRecord["status"] = assumptionIds.length && evidenceIds.length < 2 ? "ASSUMPTION" : "UNKNOWN";
 
-    if (status === "UNKNOWN" || status === "UNSUPPORTED" || status === "PARTIAL") {
+    if (status === "UNKNOWN") {
       const unknownId = stableId("U", text);
       unknowns.push({
         id: unknownId,
@@ -212,13 +198,7 @@ export function examineLocally(question: string, sources: SourceRecord[]): Exami
       assumptionIds,
       contradictionIds,
       unknownIds,
-      rationale: status === "SUPPORTED"
-        ? "More than one linked source supports this statement."
-        : status === "CONTRADICTED"
-          ? "At least one linked source conflicts with this statement."
-          : status === "ASSUMPTION"
-            ? "This statement depends on something the available sources do not yet establish."
-            : "The available sources do not yet establish the full statement.",
+      rationale: status === "ASSUMPTION" ? "This statement depends on something the available sources do not yet establish." : "The available sources do not yet establish the full statement.",
       humanOverride: false
     });
   });
