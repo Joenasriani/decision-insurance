@@ -37,6 +37,12 @@ Else if any CRITICAL claim is not SUPPORTED (including PARTIAL, UNSUPPORTED, UNK
 Else if any IMPORTANT claim is not SUPPORTED:
 `MATERIAL_GAPS_REMAIN`
 
+Else if any SUPPORTING claim is not SUPPORTED:
+`MATERIAL_GAPS_REMAIN`
+
+Else if there are zero claims:
+`INSUFFICIENT_EVIDENCE`
+
 Else:
 `STRONG_EVIDENCE_COVERAGE`
 
@@ -45,3 +51,5 @@ This is a deterministic default and may be refined only by a versioned protocol 
 ## Required Critical Gap List
 
 Every readiness output must list unresolved CRITICAL claims explicitly.
+
+`STRONG_EVIDENCE_COVERAGE` is a deterministic summary of assigned statuses, not independent verification that any evidence or status is correct. Manual status and criticality overrides must be recorded and versioned.
