@@ -40,7 +40,7 @@ async function ingest(name,mime,bytes){
 }
 test("real single-page PDF fixture extracts text but never certifies completeness",async()=>{
  const response=await ingest("fixture.pdf","application/pdf",makePDF());
- assert.equal(response.status,200);
+ assert.equal(response.status,200,JSON.stringify(await response.clone().json()));
  const data=await response.json();
  assert.match(data.text,/Page One Fixture/);
  assert.equal(data.kind,"PDF");
