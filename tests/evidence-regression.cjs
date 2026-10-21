@@ -30,3 +30,16 @@ test("source provenance is retained without promotion to verified",()=>{
  assert.ok(result.evidence.length);
  assert.ok(result.evidence.every(e=>e.provenanceStatus==="USER_SUPPLIED" && e.strength==="UNASSESSED" && e.sourceDate==="2026-01-01"));
 });
+
+test("primary report cannot serve as independent evidence for itself",()=>{
+ const report=source("S1","PRIMARY_INPUT_REPORT","The proposed investment will increase revenue by twenty percent next year.");
+ const result=examineLocally("Should we invest?",[report]);
+ assert.equal(result.evidence.length,0);
+ assert.equal(result.readiness.label,"INSUFFICIENT_EVIDENCE");
+});
+test("incomplete PDF markers cannot imply verified page provenance",()=>{
+ const pdf=source("P3","RESEARCH_SOURCE","First page. [[PAGE 1 OF 3]] Second page. [[PAGE 2 OF 3]]",{kind:"PDF",pageCount:3});
+ const chunks=chunkSources([pdf]);
+ assert.ok(chunks.length);
+ assert.ok(chunks.every(c=>c.pageStart===undefined));
+});
