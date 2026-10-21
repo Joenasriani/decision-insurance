@@ -2,6 +2,7 @@
 
 import { ChangeEvent, useMemo, useRef, useState } from "react";
 import { saveExamination } from "@/lib/storage";
+import { calculateReadiness } from "@/lib/engine";
 import type { ClaimStatus, Examination, SourceRecord, SourceRole } from "@/types/core";
 
 const roleLabels: Record<SourceRole, string> = {
@@ -232,19 +233,8 @@ export default function DecisionWorkbench() {
 
   async function setManualStatus(status: ClaimStatus) {
     if (!examination || !selectedClaim) return;
-    const next: Examination = {
-      ...examination,
-      version: examination.version + 1,
-      claims: examination.claims.map(claim => claim.id === selectedClaim.id ? { ...claim, status, humanOverride: true } : claim),
-      readiness: (() => {
-        const claims = examination.claims.map(claim => claim.id === selectedClaim.id ? { ...claim, status } : claim);
-        const criticalConflict = claims.some(c => c.criticality === "CRITICAL" && c.status === "CONTRADICTED");
-        const criticalGap = claims.some(c => c.criticality === "CRITICAL" && c.status !== "SUPPORTED");
-        const importantGap = claims.some(c => c.criticality === "IMPORTANT" && c.status !== "SUPPORTED");
-        return { label: criticalConflict ? "CRITICAL_CONTRADICTION_PRESENT" as const : criticalGap ? "INSUFFICIENT_EVIDENCE" as const : importantGap ? "MATERIAL_GAPS_REMAIN" as const : "STRONG_EVIDENCE_COVERAGE" as const,
-          criticalClaimIds: claims.filter(c => c.criticality === "CRITICAL" && c.status !== "SUPPORTED").map(c => c.id) };
-      })()
-    };
+    const claims = examination.claims.map(c => c.id === selectedClaim.id ? { ...c, status, humanOverride: true } : c);
+    const next: Examination = { ...examination, version: examination.version + 1, claims, readiness: calculateReadiness(claims) };
     setExamination(next);
     await saveExamination(next);
   }
@@ -252,13 +242,7 @@ export default function DecisionWorkbench() {
   async function setManualCriticality(criticality: Examination["claims"][number]["criticality"]) {
     if (!examination || !selectedClaim) return;
     const claims = examination.claims.map(c => c.id === selectedClaim.id ? { ...c, criticality, humanOverride: true } : c);
-    const criticalConflict = claims.some(c => c.criticality === "CRITICAL" && c.status === "CONTRADICTED");
-    const criticalGap = claims.some(c => c.criticality === "CRITICAL" && c.status !== "SUPPORTED");
-    const importantGap = claims.some(c => c.criticality === "IMPORTANT" && c.status !== "SUPPORTED");
-    const next: Examination = { ...examination, version: examination.version + 1, claims, readiness: {
-      label: criticalConflict ? "CRITICAL_CONTRADICTION_PRESENT" : criticalGap ? "INSUFFICIENT_EVIDENCE" : importantGap ? "MATERIAL_GAPS_REMAIN" : "STRONG_EVIDENCE_COVERAGE",
-      criticalClaimIds: claims.filter(c => c.criticality === "CRITICAL" && c.status !== "SUPPORTED").map(c => c.id)
-    } };
+    const next: Examination = { ...examination, version: examination.version + 1, claims, readiness: calculateReadiness(claims) };
     setExamination(next);
     await saveExamination(next);
   }
