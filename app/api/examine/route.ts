@@ -31,6 +31,8 @@ const requestSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const input = requestSchema.parse(await request.json());
+    // Client-supplied provenance labels are assertions, not server verification.
+    input.sources = input.sources.map(source => ({ ...source, provenanceStatus: source.provenanceStatus === "USER_SUPPLIED" ? "USER_SUPPLIED" as const : "UNVERIFIED" as const }));
     const gatewayReady = Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || process.env.VERCEL);
     if (gatewayReady) {
       try {
