@@ -1,7 +1,7 @@
 const {test} = require("node:test");
 const assert = require("node:assert/strict");
 require("tsx/cjs");
-const {examineLocally,chunkSources} = require("../lib/engine.ts");
+const {examineLocally,chunkSources,calculateReadiness} = require("../lib/engine.ts");
 
 const source = (id,role,text,extra={}) => ({id,label:id,kind:"TEXT",role,extractionMethod:"PASTED",extractionStatus:"COMPLETE",text,...extra});
 test("lexical similarity never establishes support or contradiction",()=>{
@@ -42,4 +42,13 @@ test("incomplete PDF markers cannot imply verified page provenance",()=>{
  const chunks=chunkSources([pdf]);
  assert.ok(chunks.length);
  assert.ok(chunks.every(c=>c.pageStart===undefined));
+});
+
+test("manual criticality changes recompute readiness without falsely certifying gaps",()=>{
+ const base={id:"C1",status:"UNKNOWN",criticality:"CRITICAL"};
+ assert.equal(calculateReadiness([base]).label,"INSUFFICIENT_EVIDENCE");
+ assert.equal(calculateReadiness([{...base,criticality:"IMPORTANT"}]).label,"MATERIAL_GAPS_REMAIN");
+ assert.equal(calculateReadiness([{...base,criticality:"SUPPORTING"}]).label,"MATERIAL_GAPS_REMAIN");
+ assert.equal(calculateReadiness([{...base,status:"SUPPORTED"}]).label,"STRONG_EVIDENCE_COVERAGE");
+ assert.equal(calculateReadiness([{...base,status:"CONTRADICTED"}]).label,"CRITICAL_CONTRADICTION_PRESENT");
 });
