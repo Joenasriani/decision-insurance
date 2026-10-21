@@ -94,6 +94,15 @@ export async function POST(request: NextRequest) {
     const parsed = requestSchema.parse(await request.json());
     const examination = parsed.examination as Examination;
     if (!examination.claims.some(claim => claim.id === parsed.claimId)) throw new Error("Claim not found.");
+    const sourceIds = new Set(examination.sources.map(source => source.id));
+    const chunkIds = new Set(examination.chunks.map(chunk => chunk.id));
+    const evidenceIds = new Set(examination.evidence.map(item => item.id));
+    const claimIds = new Set(examination.claims.map(claim => claim.id));
+    if (sourceIds.size !== examination.sources.length || chunkIds.size !== examination.chunks.length || evidenceIds.size !== examination.evidence.length || claimIds.size !== examination.claims.length) throw new Error("Duplicate identifiers.");
+    if (examination.chunks.some(chunk => !sourceIds.has(chunk.sourceId))) throw new Error("Orphaned chunk.");
+    if (examination.evidence.some(item => !sourceIds.has(item.sourceId) || !chunkIds.has(item.chunkId) || !examination.chunks.some(chunk => chunk.id === item.chunkId && chunk.sourceId === item.sourceId))) throw new Error("Orphaned evidence.");
+    if (examination.claims.some(claim => claim.evidenceIds.some(id => !evidenceIds.has(id)))) throw new Error("Orphaned claim evidence.");
+    if (examination.evidence.some(item => [...item.supportsClaimIds, ...item.contradictsClaimIds].some(id => !claimIds.has(id)))) throw new Error("Orphaned evidence claim.");
     const gatewayReady = Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || process.env.VERCEL);
 
     if (gatewayReady) {
