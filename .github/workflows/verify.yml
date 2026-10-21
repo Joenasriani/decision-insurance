@@ -32,6 +32,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add package-lock.json
           git commit -m "build: freeze npm dependency resolution for audit branch"
+          git fetch origin "refs/heads/audit/phase0-pass03-evidence-guards"
+          git rebase FETCH_HEAD
           git push origin "HEAD:refs/heads/audit/phase0-pass03-evidence-guards"
       - name: Record resolved dependency versions
         run: npm ls --depth=0
