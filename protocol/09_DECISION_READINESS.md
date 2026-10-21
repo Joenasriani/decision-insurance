@@ -31,10 +31,10 @@ These are evidence-state labels, not business recommendations.
 If any CRITICAL contradiction exists:
 `CRITICAL_CONTRADICTION_PRESENT`
 
-Else if any CRITICAL claim is unsupported/unknown/open assumption:
+Else if any CRITICAL claim is not SUPPORTED (including PARTIAL, UNSUPPORTED, UNKNOWN, ASSUMPTION):
 `INSUFFICIENT_EVIDENCE`
 
-Else if material IMPORTANT gaps remain:
+Else if any IMPORTANT claim is not SUPPORTED:
 `MATERIAL_GAPS_REMAIN`
 
 Else:
