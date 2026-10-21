@@ -7,7 +7,7 @@ on:
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   evidence_instrument:
@@ -17,24 +17,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install
-      - name: Commit generated dependency lockfile on authorized audit branch
-        if: github.event_name == 'pull_request' && github.head_ref == 'audit/phase0-pass03-evidence-guards' && github.event.pull_request.head.repo.full_name == github.repository
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          if git cat-file -e "origin/${{ github.head_ref }}:package-lock.json" 2>/dev/null; then
-            echo "Lockfile already tracked; no bootstrap commit"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package-lock.json
-          git commit -m "build: freeze npm dependency resolution for audit branch"
-          git fetch origin "refs/heads/audit/phase0-pass03-evidence-guards"
-          git rebase FETCH_HEAD
-          git push origin "HEAD:refs/heads/audit/phase0-pass03-evidence-guards"
+      - run: npm ci
       - name: Record resolved dependency versions
         run: npm ls --depth=0
       - name: Audit dependency advisories (diagnostic, non-gating)
