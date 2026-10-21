@@ -1,17 +1,6 @@
-const test = require("node:test");
-const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const ts = require("typescript");
-assert.equal(typeof ts.transpileModule, "function", "TypeScript transpiler must be available");
-const Module = require("node:module");
-const path = require("node:path");
-const file = path.join(process.cwd(), "lib/engine.ts");
-const js = ts.transpileModule(fs.readFileSync(file, "utf8"), {compilerOptions:{module:1,target:9}}).outputText;
-const m = new Module(file, module);
-m.filename = file;
-m.paths = module.paths;
-m._compile(js, file);
-const {examineLocally,chunkSources} = m.exports;
+require("tsx/cjs");
+const {examineLocally,chunkSources} = require("../lib/engine.ts");
+
 const source = (id,role,text,extra={}) => ({id,label:id,kind:"TEXT",role,extractionMethod:"PASTED",extractionStatus:"COMPLETE",text,...extra});
 test("lexical similarity never establishes support or contradiction",()=>{
  const report=source("S1","PRIMARY_INPUT_REPORT","The proposed investment will increase revenue by twenty percent next year.");
