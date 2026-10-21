@@ -52,3 +52,7 @@ test("manual criticality changes recompute readiness without falsely certifying 
  assert.equal(calculateReadiness([{...base,status:"SUPPORTED"}]).label,"STRONG_EVIDENCE_COVERAGE");
  assert.equal(calculateReadiness([{...base,status:"CONTRADICTED"}]).label,"CRITICAL_CONTRADICTION_PRESENT");
 });
+
+test("empty claim sets cannot be described as strong evidence coverage",()=>{
+ assert.deepEqual(calculateReadiness([]),{label:"INSUFFICIENT_EVIDENCE",criticalClaimIds:[]});
+});
