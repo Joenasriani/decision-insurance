@@ -28,21 +28,32 @@ export function chunkSources(sources: SourceRecord[]): SourceChunk[] {
   for (const source of sources) {
     const segments: Array<{ text: string; page?: number }> = [];
     if (source.kind === "PDF") {
-      const marker = /([\s\S]*?)\[\[PAGE (\d+) OF \d+\]\]/g;
+      const marker = /([\\s\\S]*?)\\[\\[PAGE (\\d+) OF (\\d+)\\]\\]/g;
       let match: RegExpExecArray | null;
       let lastIndex = 0;
+      let expectedPage = 1;
+      let valid = true;
       while ((match = marker.exec(source.text)) !== null) {
-        const text = match[1].trim();
         const page = Number(match[2]);
+        const total = Number(match[3]);
+        if (page !== expectedPage || (source.pageCount !== undefined && total !== source.pageCount)) {
+          valid = false;
+          break;
+        }
+        const text = match[1].trim();
         if (text) segments.push({ text, page });
+        expectedPage += 1;
         lastIndex = marker.lastIndex;
       }
       const tail = source.text.slice(lastIndex).trim();
-      if (tail) {
-        const page = segments.length ? (segments[segments.length - 1].page ?? 0) + 1 : 1;
-        segments.push({ text: tail, page });
+      if (valid && expectedPage > 1 && tail && (source.pageCount === undefined || expectedPage <= source.pageCount)) {
+        segments.push({ text: tail, page: expectedPage });
+      } else if (valid && expectedPage === 1 && tail) {
+        segments.push({ text: tail });
+      } else if (!valid) {
+        segments.length = 0;
+        segments.push({ text: source.text.replace(/\\[\\[PAGE \\d+ OF \\d+\\]\\]/g, "").trim() });
       }
-      if (!segments.length && source.text.trim()) segments.push({ text: source.text.trim() });
     } else {
       segments.push({ text: source.text });
     }
