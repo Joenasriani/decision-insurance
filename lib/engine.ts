@@ -127,6 +127,7 @@ function isAssumptionText(text: string) {
 }
 
 export function calculateReadiness(claims: ClaimRecord[]): Examination["readiness"] {
+  if (claims.length === 0) return { label: "INSUFFICIENT_EVIDENCE", criticalClaimIds: [] };
   const criticalContradiction = claims.some(c => c.criticality === "CRITICAL" && c.status === "CONTRADICTED");
   const criticalGap = claims.some(c => c.criticality === "CRITICAL" && c.status !== "SUPPORTED");
   const importantGap = claims.some(c => c.criticality === "IMPORTANT" && c.status !== "SUPPORTED");
