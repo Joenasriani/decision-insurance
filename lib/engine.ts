@@ -165,9 +165,6 @@ export function examineLocally(question: string, sources: SourceRecord[]): Exami
       evidence.push(record);
       evidenceIds.push(evidenceId);
     });
-        contradictionIds.push(contradictionId);
-      }
-    });
 
     if (isAssumptionText(text)) {
       const assumptionId = stableId("A", text);
