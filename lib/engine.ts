@@ -155,6 +155,11 @@ export function examineLocally(question: string, sources: SourceRecord[]): Exami
         excerpt: item.chunk.text.slice(0, 520),
         normalizedFact: item.chunk.text.slice(0, 240),
         relevance: Number(item.score.toFixed(3)),
+        retrievalDate: new Date().toISOString(),
+        retrievalMethod: "LEXICAL",
+        sourceDate: sources.find(source => source.id === item.chunk.sourceId)?.sourceDate,
+        provenanceStatus: sources.find(source => source.id === item.chunk.sourceId)?.provenanceStatus ?? "UNVERIFIED",
+        strength: "UNASSESSED",
         supportsClaimIds: [], // Retrieval similarity alone does not establish support.
         contradictsClaimIds: contradicts ? [claimId] : []
       };
