@@ -14,6 +14,8 @@ const sourceSchema = z.object({
   canonicalUrl: z.string().optional(),
   title: z.string().optional(),
   retrievedAt: z.string().optional(),
+  sourceDate: z.string().optional(),
+  provenanceStatus: z.enum(["VERIFIED", "USER_SUPPLIED", "UNVERIFIED"]).optional(),
   extractionMethod: z.enum(["PASTED", "NATIVE", "OCR", "WEB_FETCH"]),
   extractionStatus: z.enum(["COMPLETE", "PARTIAL", "FAILED"]),
   text: z.string().min(1),
