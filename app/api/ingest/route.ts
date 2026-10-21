@@ -22,10 +22,8 @@ export async function POST(request: NextRequest) {
     if (file.type === "application/pdf" || lower.endsWith(".pdf")) {
       const parser = new PDFParse({ data: bytes });
       try {
-        const [textResult, infoResult] = await Promise.all([
-          parser.getText({ pageJoiner: "\n\n[[PAGE page_number OF total_number]]\n\n" }),
-          parser.getInfo({ parsePageInfo: true })
-        ]);
+        const textResult = await parser.getText({ pageJoiner: "\n\n[[PAGE page_number OF total_number]]\n\n" });
+        const infoResult = await parser.getInfo({ parsePageInfo: true });
         const text = clean(textResult.text);
         const markers = [...text.matchAll(/\[\[PAGE (\d+) OF (\d+)\]\]/g)];
         const total = infoResult.total;
