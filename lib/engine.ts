@@ -147,7 +147,7 @@ export function examineLocally(question: string, sources: SourceRecord[]): Exami
 
     ranked.forEach((item, rIndex) => {
       const evidenceId = stableId("E", `${claimId}:${item.chunk.id}`, rIndex);
-      const contradicts = looksContradictory(text, item.chunk.text);
+      const contradicts = false; // Lexical negation is not proof of contradiction.
       const record: EvidenceRecord = {
         id: evidenceId,
         sourceId: item.chunk.sourceId,
@@ -155,7 +155,7 @@ export function examineLocally(question: string, sources: SourceRecord[]): Exami
         excerpt: item.chunk.text.slice(0, 520),
         normalizedFact: item.chunk.text.slice(0, 240),
         relevance: Number(item.score.toFixed(3)),
-        supportsClaimIds: contradicts ? [] : [claimId],
+        supportsClaimIds: [], // Retrieval similarity alone does not establish support.
         contradictsClaimIds: contradicts ? [claimId] : []
       };
       evidence.push(record);
@@ -182,9 +182,9 @@ export function examineLocally(question: string, sources: SourceRecord[]): Exami
     let status: ClaimRecord["status"] = "UNKNOWN";
     if (contradictionIds.length) status = "CONTRADICTED";
     else if (assumptionIds.length && evidenceIds.length < 2) status = "ASSUMPTION";
-    else if (ranked[0]?.score >= 0.34 && ranked.length >= 2) status = "SUPPORTED";
-    else if (ranked[0]?.score >= 0.18) status = "PARTIAL";
-    else if (ranked.length) status = "UNSUPPORTED";
+    // Local retrieval never automatically establishes factual support.
+    else if (ranked[0]?.score >= 0.18) status = "UNKNOWN";
+    else if (ranked.length) status = "UNKNOWN";
 
     if (status === "UNKNOWN" || status === "UNSUPPORTED" || status === "PARTIAL") {
       const unknownId = stableId("U", text);
@@ -200,7 +200,7 @@ export function examineLocally(question: string, sources: SourceRecord[]): Exami
     claims.push({
       id: claimId,
       text,
-      criticality: i < 3 ? "CRITICAL" : i < 8 ? "IMPORTANT" : "SUPPORTING",
+      criticality: "CRITICAL", // Conservative until criticality is explicitly assessed.
       status,
       sourceId: primary?.id,
       evidenceIds,
@@ -219,7 +219,7 @@ export function examineLocally(question: string, sources: SourceRecord[]): Exami
   });
 
   const criticalContradiction = claims.some(c => c.criticality === "CRITICAL" && c.status === "CONTRADICTED");
-  const criticalGap = claims.some(c => c.criticality === "CRITICAL" && ["UNSUPPORTED", "UNKNOWN", "ASSUMPTION"].includes(c.status));
+  const criticalGap = claims.some(c => c.criticality === "CRITICAL" && c.status !== "SUPPORTED");
   const importantGap = claims.some(c => c.criticality === "IMPORTANT" && c.status !== "SUPPORTED");
 
   const readiness: Examination["readiness"] = {
@@ -249,7 +249,8 @@ export function examineLocally(question: string, sources: SourceRecord[]): Exami
     readiness,
     limitations: [
       "This first build uses deterministic local decomposition and lexical retrieval when no model adapter is configured.",
-      "Retrieved overlap is evidence discovery, not proof. Human inspection remains authoritative."
+      "Retrieved overlap is evidence discovery, not proof. Human inspection remains authoritative.",
+      "Local fallback cannot establish support or contradiction from lexical matching and conservatively flags claims for review."
     ]
   };
 }
