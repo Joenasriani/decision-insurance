@@ -100,3 +100,10 @@ test("oversized uploaded documents fail before parser execution",async()=>{
  const data=await response.json();
  assert.match(data.error,/20 MB limit/);
 });
+
+test("Mammoth library import does not load CLI-only vulnerable dependency chain",()=>{
+ const program='require("mammoth");const loaded=Object.keys(require.cache);console.log(JSON.stringify({argparse:loaded.some(x=>/node_modules[\\\\/]argparse[\\\\/]/.test(x)),sprintf:loaded.some(x=>/node_modules[\\\\/]sprintf-js[\\\\/]/.test(x))}))';
+ const result=spawnSync(process.execPath,["-e",program],{encoding:"utf8",timeout:10000});
+ assert.equal(result.status,0,result.stderr);
+ assert.deepEqual(JSON.parse(result.stdout.trim()),{argparse:false,sprintf:false});
+});
