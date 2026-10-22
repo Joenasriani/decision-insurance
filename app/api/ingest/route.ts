@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PDFParse } from "pdf-parse";
-import mammoth from "mammoth";
+import { Worker } from "node:worker_threads";
+import { join } from "node:path";
 
 export const runtime = "nodejs";
 
@@ -17,6 +17,36 @@ function clean(text: string) {
   return text.replace(/\r/g, "").replace(/[ \t]+\n/g, "\n").replace(/\n{4,}/g, "\n\n\n").trim();
 }
 
+type ParserResult = { kind: "PDF" | "DOCX"; text: string; pageCount?: number; extractionStatus: "PARTIAL"; notes: string[] };
+
+// Per-request worker deadlines and V8 heap budgets reduce parser exposure, but
+// do not impose OS-level RSS limits or guarantee isolation from native allocations.
+function parseInWorker(kind: "PDF" | "DOCX", bytes: Uint8Array): Promise<ParserResult> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(join(process.cwd(), "lib", "document-parser-worker.cjs"), {
+      workerData: { kind, bytes },
+      resourceLimits: { maxOldGenerationSizeMb: 128, maxYoungGenerationSizeMb: 32, stackSizeMb: 4 }
+    });
+    let settled = false;
+    const finish = (error?: Error, value?: ParserResult) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      void worker.terminate();
+      if (error) reject(error);
+      else if (value) resolve(value);
+      else reject(new Error("Document parser returned no result."));
+    };
+    const timeout = setTimeout(() => finish(new Error("Document parsing exceeded the 10-second time limit.")), 10_000);
+    worker.on("message", (response: { ok: boolean; error?: string; value?: ParserResult }) => {
+      if (response.ok && response.value) finish(undefined, response.value);
+      else finish(new Error(response.error || "Document parser failed."));
+    });
+    worker.on("error", (error: Error) => finish(new Error("Document parser worker failed: " + error.message)));
+    worker.on("exit", (code: number) => finish(new Error("Document parser exited before producing a result (code " + code + ").")));
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const form = await request.formData();
@@ -28,45 +58,10 @@ export async function POST(request: NextRequest) {
     const lower = name.toLowerCase();
     const bytes = new Uint8Array(await file.arrayBuffer());
 
-    if (file.type === "application/pdf" || lower.endsWith(".pdf")) {
-      const parser = new PDFParse({ data: bytes });
-      try {
-        const textResult = await parser.getText({ pageJoiner: "\n\n[[PAGE page_number OF total_number]]\n\n" });
-        const infoResult = await parser.getInfo({ parsePageInfo: true });
-        const text = enforceTextLimit(clean(textResult.text));
-        const markers = [...text.matchAll(/\[\[PAGE (\d+) OF (\d+)\]\]/g)];
-        const total = infoResult.total;
-        if (Number.isInteger(total) && total > MAX_PDF_PAGES) throw new Error("This PDF exceeds the current 200-page limit.");
-        const markersValid = Number.isInteger(total) && total > 0 &&
-          markers.length === total &&
-          markers.every((m, i) => Number(m[1]) === i + 1 && Number(m[2]) === total);
-        const readable = text.replace(/\[\[PAGE \d+ OF \d+\]\]/g, "").trim();
-        const notes: string[] = [];
-        if (!markersValid) notes.push("Page attribution could not be verified; page references must not be trusted.");
-        if (readable.length <= 100) notes.push("This PDF contains very little selectable text. Try another copy or paste the relevant text manually.");
-        notes.push("Extraction is not independently checked against visual page content, tables or figures.");
-        return NextResponse.json({
-          label: name,
-          kind: "PDF",
-          text,
-          pageCount: total,
-          extractionStatus: "PARTIAL",
-          notes
-        });
-      } finally {
-        await parser.destroy();
-      }
-    }
-
-    if (file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || lower.endsWith(".docx")) {
-      const result = await mammoth.extractRawText({ buffer: Buffer.from(bytes) });
-      return NextResponse.json({
-        label: name,
-        kind: "DOCX",
-        text: enforceTextLimit(clean(result.value)),
-        extractionStatus: "PARTIAL",
-        notes: ["Raw-text DOCX extraction does not verify figures, tables, or layout completeness.", ...result.messages.map(message => message.message).slice(0, 7)]
-      });
+    if (file.type === "application/pdf" || lower.endsWith(".pdf") || file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || lower.endsWith(".docx")) {
+      const kind = file.type === "application/pdf" || lower.endsWith(".pdf") ? "PDF" : "DOCX";
+      const extracted = await parseInWorker(kind, bytes);
+      return NextResponse.json({ label: name, ...extracted });
     }
 
     if (file.type.startsWith("text/") || /\.(txt|md|markdown|csv)$/i.test(name)) {
