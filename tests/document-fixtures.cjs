@@ -158,3 +158,9 @@ test("isolated worker parses a real PDF and DOCX rather than only compiling",asy
   assert.match((await response.json()).text,expected);
  }
 });
+
+test("201-page PDF is rejected before bulk text extraction",async()=>{
+ const response=await ingest("too-many-pages.pdf","application/pdf",makePDF(201));
+ assert.equal(response.status,400,JSON.stringify(await response.clone().json()));
+ assert.match((await response.json()).error,/200-page limit/);
+});
