@@ -147,3 +147,14 @@ test("plain-text response at extracted character limit is permitted",async()=>{
  const data=await response.json();
  assert.equal(data.text.length,2_000_000);
 });
+
+test("isolated worker parses a real PDF and DOCX rather than only compiling",async()=>{
+ for(const [name,mime,bytes,expected] of [
+  ["worker.pdf","application/pdf",makePDF(),/Page 1 Fixture/],
+  ["worker.docx","application/vnd.openxmlformats-officedocument.wordprocessingml.document",makeDOCX(),/DOCX Fixture Content/]
+ ]){
+  const response=await ingest(name,mime,bytes);
+  assert.equal(response.status,200,JSON.stringify(await response.clone().json()));
+  assert.match((await response.json()).text,expected);
+ }
+});
