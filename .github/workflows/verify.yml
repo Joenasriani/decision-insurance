@@ -17,6 +17,24 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install
+      - run: npm ci
+      - name: Record resolved dependency versions
+        run: npm ls --depth=0
+      - name: Audit dependency advisories (diagnostic, non-gating)
+        run: |
+          npm audit --json > npm-audit.json || true
+          node -e 'const a=require("./npm-audit.json"); console.log(JSON.stringify({metadata:a.metadata?.vulnerabilities, advisories:Object.entries(a.vulnerabilities||{}).map(([name,v])=>({name,severity:v.severity,isDirect:v.isDirect,via:v.via.map(x=>typeof x==="string"?x:x.url||x.name),fixAvailable:v.fixAvailable}))},null,2))'
+      - name: Upload private dependency evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-evidence
+          path: |
+            npm-audit.json
+            package-lock.json
+          retention-days: 7
+      - run: node --test tests/*.cjs
       - run: npm run typecheck
       - run: npm run build
+      - name: Verify ingest worker deployment trace
+        run: |
+          node -e 'const fs=require("fs"),path=require("path");const files=[];function walk(d){if(!fs.existsSync(d))return;for(const n of fs.readdirSync(d)){const p=path.join(d,n);const st=fs.statSync(p);if(st.isDirectory())walk(p);else if(p.endsWith(".nft.json")&&p.includes("ingest"))files.push(p)}}walk(".next/server");if(!files.length)throw Error("No ingest route trace located");const hit=files.some(f=>JSON.parse(fs.readFileSync(f,"utf8")).files.some(x=>x.includes("document-parser-worker.cjs")));console.log(JSON.stringify({traces:files,workerTraced:hit}));if(!hit)throw Error("Parser worker missing from ingest route deployment trace")'

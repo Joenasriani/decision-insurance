@@ -1,11 +1,50 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PDFParse } from "pdf-parse";
-import mammoth from "mammoth";
+import { Worker } from "node:worker_threads";
+import { join } from "node:path";
 
 export const runtime = "nodejs";
 
+// These response-size safeguards do not replace parser CPU, memory, or decompression limits.
+const MAX_EXTRACTED_TEXT_CHARS = 2_000_000;
+const MAX_PDF_PAGES = 200;
+
+function enforceTextLimit(text: string) {
+  if (text.length > MAX_EXTRACTED_TEXT_CHARS) throw new Error("Extracted text exceeds the current 2,000,000 character limit.");
+  return text;
+}
+
 function clean(text: string) {
   return text.replace(/\r/g, "").replace(/[ \t]+\n/g, "\n").replace(/\n{4,}/g, "\n\n\n").trim();
+}
+
+type ParserResult = { kind: "PDF" | "DOCX"; text: string; pageCount?: number; extractionStatus: "PARTIAL"; notes: string[] };
+
+// Per-request worker deadlines and V8 heap budgets reduce parser exposure, but
+// do not impose OS-level RSS limits or guarantee isolation from native allocations.
+function parseInWorker(kind: "PDF" | "DOCX", bytes: Uint8Array): Promise<ParserResult> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(join(process.cwd(), "lib", "document-parser-worker.cjs"), {
+      workerData: { kind, bytes },
+      resourceLimits: { maxOldGenerationSizeMb: 128, maxYoungGenerationSizeMb: 32, stackSizeMb: 4 }
+    });
+    let settled = false;
+    const finish = (error?: Error, value?: ParserResult) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      void worker.terminate();
+      if (error) reject(error);
+      else if (value) resolve(value);
+      else reject(new Error("Document parser returned no result."));
+    };
+    const timeout = setTimeout(() => finish(new Error("Document parsing exceeded the 10-second time limit.")), 10_000);
+    worker.on("message", (response: { ok: boolean; error?: string; value?: ParserResult }) => {
+      if (response.ok && response.value) finish(undefined, response.value);
+      else finish(new Error(response.error || "Document parser failed."));
+    });
+    worker.on("error", (error: Error) => finish(new Error("Document parser worker failed: " + error.message)));
+    worker.on("exit", (code: number) => finish(new Error("Document parser exited before producing a result (code " + code + ").")));
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -19,43 +58,17 @@ export async function POST(request: NextRequest) {
     const lower = name.toLowerCase();
     const bytes = new Uint8Array(await file.arrayBuffer());
 
-    if (file.type === "application/pdf" || lower.endsWith(".pdf")) {
-      const parser = new PDFParse({ data: bytes });
-      try {
-        const [textResult, infoResult] = await Promise.all([
-          parser.getText({ pageJoiner: "\n\n[[PAGE page_number OF total_number]]\n\n" }),
-          parser.getInfo({ parsePageInfo: true })
-        ]);
-        const text = clean(textResult.text);
-        return NextResponse.json({
-          label: name,
-          kind: "PDF",
-          text,
-          pageCount: infoResult.total,
-          extractionStatus: text.length > 100 ? "COMPLETE" : "PARTIAL",
-          notes: text.length > 100 ? [] : ["This PDF contains very little selectable text. Try another copy or paste the relevant text manually."]
-        });
-      } finally {
-        await parser.destroy();
-      }
-    }
-
-    if (file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || lower.endsWith(".docx")) {
-      const result = await mammoth.extractRawText({ buffer: Buffer.from(bytes) });
-      return NextResponse.json({
-        label: name,
-        kind: "DOCX",
-        text: clean(result.value),
-        extractionStatus: "COMPLETE",
-        notes: result.messages.map(message => message.message).slice(0, 8)
-      });
+    if (file.type === "application/pdf" || lower.endsWith(".pdf") || file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || lower.endsWith(".docx")) {
+      const kind = file.type === "application/pdf" || lower.endsWith(".pdf") ? "PDF" : "DOCX";
+      const extracted = await parseInWorker(kind, bytes);
+      return NextResponse.json({ label: name, ...extracted });
     }
 
     if (file.type.startsWith("text/") || /\.(txt|md|markdown|csv)$/i.test(name)) {
       return NextResponse.json({
         label: name,
         kind: lower.endsWith(".md") || lower.endsWith(".markdown") ? "MARKDOWN" : "TEXT",
-        text: clean(new TextDecoder().decode(bytes)),
+        text: enforceTextLimit(clean(new TextDecoder().decode(bytes))),
         extractionStatus: "COMPLETE",
         notes: []
       });

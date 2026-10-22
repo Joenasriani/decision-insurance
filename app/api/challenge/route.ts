@@ -13,17 +13,27 @@ const requestSchema = z.object({
   claimId: z.string().min(1),
   examination: z.object({
     id: z.string(),
-    version: z.number(),
+    version: z.number().int().positive(),
+    createdAt: z.string(),
     question: z.string(),
     sources: z.array(z.object({
       id: z.string(),
       label: z.string(),
-      canonicalUrl: z.string().optional()
+      canonicalUrl: z.string().optional(),
+      kind: z.enum(["TEXT","PDF","DOCX","WEBPAGE","MARKDOWN"]),
+      role: z.enum(["PRIMARY_INPUT_REPORT","RESEARCH_SOURCE","SUPPORTING_EVIDENCE","COUNTER_EVIDENCE","USER_REFERENCE","UNKNOWN_ROLE"]),
+      extractionMethod: z.enum(["PASTED","NATIVE","OCR","WEB_FETCH"]),
+      extractionStatus: z.enum(["COMPLETE","PARTIAL","FAILED"]),
+      text: z.string(),
+      pageCount: z.number().int().positive().optional()
     }).passthrough()),
     chunks: z.array(z.object({
       id: z.string(),
       sourceId: z.string(),
-      pageStart: z.number().optional()
+      order: z.number().int().nonnegative(),
+      text: z.string(),
+      pageStart: z.number().int().positive().optional(),
+      pageEnd: z.number().int().positive().optional()
     }).passthrough()),
     claims: z.array(z.object({
       id: z.string(),
@@ -43,6 +53,7 @@ const requestSchema = z.object({
       chunkId: z.string(),
       excerpt: z.string(),
       normalizedFact: z.string(),
+      relevance: z.number(),
       supportsClaimIds: z.array(z.string()),
       contradictsClaimIds: z.array(z.string())
     }).passthrough()),
@@ -65,10 +76,16 @@ const requestSchema = z.object({
       claimId: z.string(),
       requiredEvidence: z.string()
     })),
-    challenges: z.array(z.any()),
-    readiness: z.any(),
+    challenges: z.array(z.object({
+      id: z.string(), claimId: z.string(),
+      result: z.enum(["SURVIVES","WEAKENED","MATERIAL_GAP","CONTRADICTED","UNRESOLVED"]),
+      weaknesses: z.array(z.string()), missingEvidence: z.array(z.string()), alternativeExplanations: z.array(z.string())
+    })),
+    readiness: z.object({
+      label: z.enum(["STRONG_EVIDENCE_COVERAGE","MATERIAL_GAPS_REMAIN","INSUFFICIENT_EVIDENCE","CRITICAL_CONTRADICTION_PRESENT"]),
+      criticalClaimIds: z.array(z.string())
+    }),
     limitations: z.array(z.string()),
-    createdAt: z.string().optional()
   }).passthrough()
 });
 
@@ -76,6 +93,16 @@ export async function POST(request: NextRequest) {
   try {
     const parsed = requestSchema.parse(await request.json());
     const examination = parsed.examination as Examination;
+    if (!examination.claims.some(claim => claim.id === parsed.claimId)) throw new Error("Claim not found.");
+    const sourceIds = new Set(examination.sources.map(source => source.id));
+    const chunkIds = new Set(examination.chunks.map(chunk => chunk.id));
+    const evidenceIds = new Set(examination.evidence.map(item => item.id));
+    const claimIds = new Set(examination.claims.map(claim => claim.id));
+    if (sourceIds.size !== examination.sources.length || chunkIds.size !== examination.chunks.length || evidenceIds.size !== examination.evidence.length || claimIds.size !== examination.claims.length) throw new Error("Duplicate identifiers.");
+    if (examination.chunks.some(chunk => !sourceIds.has(chunk.sourceId))) throw new Error("Orphaned chunk.");
+    if (examination.evidence.some(item => !sourceIds.has(item.sourceId) || !chunkIds.has(item.chunkId) || !examination.chunks.some(chunk => chunk.id === item.chunkId && chunk.sourceId === item.sourceId))) throw new Error("Orphaned evidence.");
+    if (examination.claims.some(claim => claim.evidenceIds.some(id => !evidenceIds.has(id)))) throw new Error("Orphaned claim evidence.");
+    if (examination.evidence.some(item => [...item.supportsClaimIds, ...item.contradictsClaimIds].some(id => !claimIds.has(id)))) throw new Error("Orphaned evidence claim.");
     const gatewayReady = Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || process.env.VERCEL);
 
     if (gatewayReady) {

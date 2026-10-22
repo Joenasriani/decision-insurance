@@ -28,21 +28,33 @@ export function chunkSources(sources: SourceRecord[]): SourceChunk[] {
   for (const source of sources) {
     const segments: Array<{ text: string; page?: number }> = [];
     if (source.kind === "PDF") {
-      const marker = /([\s\S]*?)\[\[PAGE (\d+) OF \d+\]\]/g;
+      // pdf-parse inserts each marker after its corresponding page.
+      const marker = /([\s\S]*?)\[\[PAGE (\d+) OF (\d+)\]\]/g;
       let match: RegExpExecArray | null;
       let lastIndex = 0;
+      let expectedPage = 1;
+      let valid = true;
+      const totalPages = source.pageCount;
       while ((match = marker.exec(source.text)) !== null) {
-        const text = match[1].trim();
         const page = Number(match[2]);
+        const total = Number(match[3]);
+        if (page !== expectedPage || (totalPages !== undefined && total !== totalPages)) {
+          valid = false;
+          break;
+        }
+        const text = match[1].trim();
         if (text) segments.push({ text, page });
+        expectedPage++;
         lastIndex = marker.lastIndex;
       }
       const tail = source.text.slice(lastIndex).trim();
-      if (tail) {
-        const page = segments.length ? (segments[segments.length - 1].page ?? 0) + 1 : 1;
-        segments.push({ text: tail, page });
+      // Any unmarked trailing text is not safely attributable to a page.
+      if (valid && tail) segments.push({ text: tail });
+      if (!valid || (totalPages !== undefined && expectedPage - 1 !== totalPages)) {
+        segments.length = 0;
+        const plain = source.text.replace(/\[\[PAGE \d+ OF \d+\]\]/g, "").trim();
+        if (plain) segments.push({ text: plain });
       }
-      if (!segments.length && source.text.trim()) segments.push({ text: source.text.trim() });
     } else {
       segments.push({ text: source.text });
     }
@@ -114,9 +126,18 @@ function isAssumptionText(text: string) {
   return /\b(assume|assuming|likely|probably|expected|presume|should remain|will continue|implies)\b/i.test(text);
 }
 
-function looksContradictory(claim: string, evidence: string) {
-  const neg = /\b(no|not|never|decline|decrease|failed|failure|risk|contrary|however|despite|but)\b/i.test(evidence);
-  return neg && overlap(claim, evidence) > 0.16;
+export function calculateReadiness(claims: ClaimRecord[]): Examination["readiness"] {
+  if (claims.length === 0) return { label: "INSUFFICIENT_EVIDENCE", criticalClaimIds: [] };
+  const criticalContradiction = claims.some(c => c.criticality === "CRITICAL" && c.status === "CONTRADICTED");
+  const criticalGap = claims.some(c => c.criticality === "CRITICAL" && c.status !== "SUPPORTED");
+  const importantGap = claims.some(c => c.criticality === "IMPORTANT" && c.status !== "SUPPORTED");
+  const anyGap = claims.some(c => c.status !== "SUPPORTED");
+  return {
+    label: criticalContradiction ? "CRITICAL_CONTRADICTION_PRESENT" :
+      criticalGap ? "INSUFFICIENT_EVIDENCE" :
+      importantGap || anyGap ? "MATERIAL_GAPS_REMAIN" : "STRONG_EVIDENCE_COVERAGE",
+    criticalClaimIds: claims.filter(c => c.criticality === "CRITICAL" && c.status !== "SUPPORTED").map(c => c.id)
+  };
 }
 
 export function examineLocally(question: string, sources: SourceRecord[]): Examination {
@@ -134,7 +155,7 @@ export function examineLocally(question: string, sources: SourceRecord[]): Exami
   selected.forEach((text, i) => {
     const claimId = stableId("C", text, i);
     const ranked = chunks
-      .filter(c => c.sourceId !== primary?.id || c.text !== text)
+      .filter(c => c.sourceId !== primary?.id)
       .map(chunk => ({ chunk, score: overlap(text, chunk.text) }))
       .filter(x => x.score > 0.08)
       .sort((a, b) => b.score - a.score)
@@ -147,7 +168,6 @@ export function examineLocally(question: string, sources: SourceRecord[]): Exami
 
     ranked.forEach((item, rIndex) => {
       const evidenceId = stableId("E", `${claimId}:${item.chunk.id}`, rIndex);
-      const contradicts = looksContradictory(text, item.chunk.text);
       const record: EvidenceRecord = {
         id: evidenceId,
         sourceId: item.chunk.sourceId,
@@ -155,22 +175,16 @@ export function examineLocally(question: string, sources: SourceRecord[]): Exami
         excerpt: item.chunk.text.slice(0, 520),
         normalizedFact: item.chunk.text.slice(0, 240),
         relevance: Number(item.score.toFixed(3)),
-        supportsClaimIds: contradicts ? [] : [claimId],
-        contradictsClaimIds: contradicts ? [claimId] : []
+        retrievalDate: new Date().toISOString(),
+        retrievalMethod: "LEXICAL",
+        sourceDate: sources.find(source => source.id === item.chunk.sourceId)?.sourceDate,
+        provenanceStatus: sources.find(source => source.id === item.chunk.sourceId)?.provenanceStatus ?? "UNVERIFIED",
+        strength: "UNASSESSED",
+        supportsClaimIds: [], // Retrieval similarity alone does not establish support.
+        contradictsClaimIds: []
       };
       evidence.push(record);
       evidenceIds.push(evidenceId);
-      if (contradicts) {
-        const contradictionId = stableId("X", evidenceId);
-        contradictions.push({
-          id: contradictionId,
-          description: "Retrieved material conflicts with the claim wording or direction.",
-          claimId,
-          evidenceIds: [evidenceId],
-          severity: i < 3 ? "MATERIAL" : "MINOR"
-        });
-        contradictionIds.push(contradictionId);
-      }
     });
 
     if (isAssumptionText(text)) {
@@ -179,14 +193,9 @@ export function examineLocally(question: string, sources: SourceRecord[]): Exami
       assumptionIds.push(assumptionId);
     }
 
-    let status: ClaimRecord["status"] = "UNKNOWN";
-    if (contradictionIds.length) status = "CONTRADICTED";
-    else if (assumptionIds.length && evidenceIds.length < 2) status = "ASSUMPTION";
-    else if (ranked[0]?.score >= 0.34 && ranked.length >= 2) status = "SUPPORTED";
-    else if (ranked[0]?.score >= 0.18) status = "PARTIAL";
-    else if (ranked.length) status = "UNSUPPORTED";
+    const status: ClaimRecord["status"] = assumptionIds.length && evidenceIds.length < 2 ? "ASSUMPTION" : "UNKNOWN";
 
-    if (status === "UNKNOWN" || status === "UNSUPPORTED" || status === "PARTIAL") {
+    if (status === "UNKNOWN") {
       const unknownId = stableId("U", text);
       unknowns.push({
         id: unknownId,
@@ -200,38 +209,19 @@ export function examineLocally(question: string, sources: SourceRecord[]): Exami
     claims.push({
       id: claimId,
       text,
-      criticality: i < 3 ? "CRITICAL" : i < 8 ? "IMPORTANT" : "SUPPORTING",
+      criticality: "CRITICAL", // Conservative until criticality is explicitly assessed.
       status,
       sourceId: primary?.id,
       evidenceIds,
       assumptionIds,
       contradictionIds,
       unknownIds,
-      rationale: status === "SUPPORTED"
-        ? "More than one linked source supports this statement."
-        : status === "CONTRADICTED"
-          ? "At least one linked source conflicts with this statement."
-          : status === "ASSUMPTION"
-            ? "This statement depends on something the available sources do not yet establish."
-            : "The available sources do not yet establish the full statement.",
+      rationale: status === "ASSUMPTION" ? "This statement depends on something the available sources do not yet establish." : "The available sources do not yet establish the full statement.",
       humanOverride: false
     });
   });
 
-  const criticalContradiction = claims.some(c => c.criticality === "CRITICAL" && c.status === "CONTRADICTED");
-  const criticalGap = claims.some(c => c.criticality === "CRITICAL" && ["UNSUPPORTED", "UNKNOWN", "ASSUMPTION"].includes(c.status));
-  const importantGap = claims.some(c => c.criticality === "IMPORTANT" && c.status !== "SUPPORTED");
-
-  const readiness: Examination["readiness"] = {
-    label: criticalContradiction
-      ? "CRITICAL_CONTRADICTION_PRESENT"
-      : criticalGap
-        ? "INSUFFICIENT_EVIDENCE"
-        : importantGap
-          ? "MATERIAL_GAPS_REMAIN"
-          : "STRONG_EVIDENCE_COVERAGE",
-    criticalClaimIds: claims.filter(c => c.criticality === "CRITICAL" && c.status !== "SUPPORTED").map(c => c.id)
-  };
+  const readiness = calculateReadiness(claims);
 
   return {
     id: stableId("EX", `${question}:${Date.now()}`),
@@ -249,7 +239,8 @@ export function examineLocally(question: string, sources: SourceRecord[]): Exami
     readiness,
     limitations: [
       "This first build uses deterministic local decomposition and lexical retrieval when no model adapter is configured.",
-      "Retrieved overlap is evidence discovery, not proof. Human inspection remains authoritative."
+      "Retrieved overlap is evidence discovery, not proof. Human inspection remains authoritative.",
+      "Local fallback cannot establish support or contradiction from lexical matching and conservatively flags claims for review."
     ]
   };
 }

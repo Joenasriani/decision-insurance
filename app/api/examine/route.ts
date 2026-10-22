@@ -14,6 +14,8 @@ const sourceSchema = z.object({
   canonicalUrl: z.string().optional(),
   title: z.string().optional(),
   retrievedAt: z.string().optional(),
+  sourceDate: z.string().optional(),
+  provenanceStatus: z.enum(["VERIFIED", "USER_SUPPLIED", "UNVERIFIED"]).optional(),
   extractionMethod: z.enum(["PASTED", "NATIVE", "OCR", "WEB_FETCH"]),
   extractionStatus: z.enum(["COMPLETE", "PARTIAL", "FAILED"]),
   text: z.string().min(1),
@@ -29,6 +31,8 @@ const requestSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const input = requestSchema.parse(await request.json());
+    // Client-supplied provenance labels are assertions, not server verification.
+    input.sources = input.sources.map(source => ({ ...source, provenanceStatus: source.provenanceStatus === "USER_SUPPLIED" ? "USER_SUPPLIED" as const : "UNVERIFIED" as const }));
     const gatewayReady = Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || process.env.VERCEL);
     if (gatewayReady) {
       try {

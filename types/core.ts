@@ -27,6 +27,8 @@ export interface SourceRecord {
   canonicalUrl?: string;
   title?: string;
   retrievedAt?: string;
+  sourceDate?: string;
+  provenanceStatus?: "VERIFIED" | "USER_SUPPLIED" | "UNVERIFIED";
   extractionMethod: "PASTED" | "NATIVE" | "OCR" | "WEB_FETCH";
   extractionStatus: "COMPLETE" | "PARTIAL" | "FAILED";
   text: string;
@@ -51,6 +53,11 @@ export interface EvidenceRecord {
   excerpt: string;
   normalizedFact: string;
   relevance: number;
+  sourceDate?: string;
+  retrievalDate?: string;
+  retrievalMethod?: "LEXICAL" | "MODEL" | "MANUAL";
+  provenanceStatus?: "VERIFIED" | "USER_SUPPLIED" | "UNVERIFIED";
+  strength?: "HIGH" | "MEDIUM" | "LOW" | "UNASSESSED";
   supportsClaimIds: string[];
   contradictsClaimIds: string[];
 }

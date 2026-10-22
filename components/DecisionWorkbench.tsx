@@ -2,6 +2,7 @@
 
 import { ChangeEvent, useMemo, useRef, useState } from "react";
 import { saveExamination } from "@/lib/storage";
+import { calculateReadiness } from "@/lib/engine";
 import type { ClaimStatus, Examination, SourceRecord, SourceRole } from "@/types/core";
 
 const roleLabels: Record<SourceRole, string> = {
@@ -91,6 +92,7 @@ export default function DecisionWorkbench() {
       label: role === "PRIMARY_INPUT_REPORT" ? "Pasted report or recommendation" : "Pasted source",
       kind: "TEXT",
       role,
+      provenanceStatus: "USER_SUPPLIED",
       extractionMethod: "PASTED",
       extractionStatus: "COMPLETE",
       text
@@ -120,6 +122,7 @@ export default function DecisionWorkbench() {
         locator: webAddress.trim(),
         canonicalUrl: data.canonicalUrl,
         retrievedAt: data.retrievedAt,
+        provenanceStatus: "UNVERIFIED",
         extractionMethod: "WEB_FETCH",
         extractionStatus: "COMPLETE",
         text: data.text
@@ -151,6 +154,7 @@ export default function DecisionWorkbench() {
           label: data.label || file.name,
           kind: data.kind,
           role: sourceRole,
+          provenanceStatus: "USER_SUPPLIED",
           extractionMethod: "NATIVE",
           extractionStatus: data.extractionStatus,
           text: data.text,
@@ -229,11 +233,16 @@ export default function DecisionWorkbench() {
 
   async function setManualStatus(status: ClaimStatus) {
     if (!examination || !selectedClaim) return;
-    const next: Examination = {
-      ...examination,
-      version: examination.version + 1,
-      claims: examination.claims.map(claim => claim.id === selectedClaim.id ? { ...claim, status, humanOverride: true } : claim)
-    };
+    const claims = examination.claims.map(c => c.id === selectedClaim.id ? { ...c, status, humanOverride: true } : c);
+    const next: Examination = { ...examination, version: examination.version + 1, claims, readiness: calculateReadiness(claims) };
+    setExamination(next);
+    await saveExamination(next);
+  }
+
+  async function setManualCriticality(criticality: Examination["claims"][number]["criticality"]) {
+    if (!examination || !selectedClaim) return;
+    const claims = examination.claims.map(c => c.id === selectedClaim.id ? { ...c, criticality, humanOverride: true } : c);
+    const next: Examination = { ...examination, version: examination.version + 1, claims, readiness: calculateReadiness(claims) };
     setExamination(next);
     await saveExamination(next);
   }
@@ -376,6 +385,13 @@ export default function DecisionWorkbench() {
               <strong>{statusLabels[selectedClaim.status]}</strong>
             </div>
             <h3>{selectedClaim.text}</h3>
+            <label htmlFor="claim-criticality">Human review of claim importance</label>
+            <select id="claim-criticality" value={selectedClaim.criticality} onChange={event => void setManualCriticality(event.target.value as Examination["claims"][number]["criticality"])}>
+              <option value="CRITICAL">Critical</option>
+              <option value="IMPORTANT">Important</option>
+              <option value="SUPPORTING">Supporting</option>
+            </select>
+            <p>Review the conservative default against the decision context.</p>
 
             <section className="inspectionSection">
               <h4>WHY THIS ASSESSMENT</h4>
