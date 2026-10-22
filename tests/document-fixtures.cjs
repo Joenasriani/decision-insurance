@@ -107,3 +107,31 @@ test("Mammoth library import does not load CLI-only vulnerable dependency chain"
  assert.equal(result.status,0,result.stderr);
  assert.deepEqual(JSON.parse(result.stdout.trim()),{argparse:false,sprintf:false});
 });
+
+test("missing upload and unsupported file types fail closed",async()=>{
+ const empty=await POST(new Request("http://localhost/api/ingest",{method:"POST",body:new FormData()}));
+ assert.equal(empty.status,400);
+ assert.match((await empty.json()).error,/No source file/);
+ const unsupported=await ingest("payload.exe","application/octet-stream",Buffer.from("payload"));
+ assert.equal(unsupported.status,400);
+ assert.match((await unsupported.json()).error,/not supported/);
+});
+test("corrupt PDF input fails without extracted text",async()=>{
+ const response=await ingest("corrupt.pdf","application/pdf",Buffer.from("%PDF-1.4\\ninvalid xref and page objects"));
+ assert.equal(response.status,400);
+ const data=await response.json();
+ assert.equal(typeof data.error,"string");
+ assert.ok(!("text" in data));
+});
+test("zero-byte DOCX and PDF are rejected",async()=>{
+ for(const [name,mime] of [["empty.docx","application/vnd.openxmlformats-officedocument.wordprocessingml.document"],["empty.pdf","application/pdf"]]){
+  const response=await ingest(name,mime,Buffer.alloc(0));
+  assert.equal(response.status,400,name);
+  assert.ok((await response.json()).error);
+ }
+});
+test("20 MB upload cap applies to PDF as well as DOCX",async()=>{
+ const response=await ingest("oversized.pdf","application/pdf",Buffer.alloc(20*1024*1024+1));
+ assert.equal(response.status,400);
+ assert.match((await response.json()).error,/20 MB limit/);
+});
