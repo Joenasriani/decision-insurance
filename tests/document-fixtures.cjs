@@ -135,3 +135,15 @@ test("20 MB upload cap applies to PDF as well as DOCX",async()=>{
  assert.equal(response.status,400);
  assert.match((await response.json()).error,/20 MB limit/);
 });
+
+test("oversized extracted plain-text output is rejected rather than returned",async()=>{
+ const response=await ingest("large.txt","text/plain",Buffer.alloc(2_000_001,65));
+ assert.equal(response.status,400);
+ assert.match((await response.json()).error,/2,000,000 character limit/);
+});
+test("plain-text response at extracted character limit is permitted",async()=>{
+ const response=await ingest("boundary.txt","text/plain",Buffer.alloc(2_000_000,65));
+ assert.equal(response.status,200);
+ const data=await response.json();
+ assert.equal(data.text.length,2_000_000);
+});
