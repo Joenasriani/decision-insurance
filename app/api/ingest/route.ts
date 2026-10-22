@@ -4,6 +4,15 @@ import mammoth from "mammoth";
 
 export const runtime = "nodejs";
 
+// These response-size safeguards do not replace parser CPU, memory, or decompression limits.
+const MAX_EXTRACTED_TEXT_CHARS = 2_000_000;
+const MAX_PDF_PAGES = 200;
+
+function enforceTextLimit(text: string) {
+  if (text.length > MAX_EXTRACTED_TEXT_CHARS) throw new Error("Extracted text exceeds the current 2,000,000 character limit.");
+  return text;
+}
+
 function clean(text: string) {
   return text.replace(/\r/g, "").replace(/[ \t]+\n/g, "\n").replace(/\n{4,}/g, "\n\n\n").trim();
 }
@@ -24,9 +33,10 @@ export async function POST(request: NextRequest) {
       try {
         const textResult = await parser.getText({ pageJoiner: "\n\n[[PAGE page_number OF total_number]]\n\n" });
         const infoResult = await parser.getInfo({ parsePageInfo: true });
-        const text = clean(textResult.text);
+        const text = enforceTextLimit(clean(textResult.text));
         const markers = [...text.matchAll(/\[\[PAGE (\d+) OF (\d+)\]\]/g)];
         const total = infoResult.total;
+        if (Number.isInteger(total) && total > MAX_PDF_PAGES) throw new Error("This PDF exceeds the current 200-page limit.");
         const markersValid = Number.isInteger(total) && total > 0 &&
           markers.length === total &&
           markers.every((m, i) => Number(m[1]) === i + 1 && Number(m[2]) === total);
@@ -53,7 +63,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         label: name,
         kind: "DOCX",
-        text: clean(result.value),
+        text: enforceTextLimit(clean(result.value)),
         extractionStatus: "PARTIAL",
         notes: ["Raw-text DOCX extraction does not verify figures, tables, or layout completeness.", ...result.messages.map(message => message.message).slice(0, 7)]
       });
@@ -63,7 +73,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         label: name,
         kind: lower.endsWith(".md") || lower.endsWith(".markdown") ? "MARKDOWN" : "TEXT",
-        text: clean(new TextDecoder().decode(bytes)),
+        text: enforceTextLimit(clean(new TextDecoder().decode(bytes))),
         extractionStatus: "COMPLETE",
         notes: []
       });
