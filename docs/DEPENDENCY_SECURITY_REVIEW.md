@@ -30,3 +30,11 @@ The application accepts user-supplied DOCX through `app/api/ingest/route.ts` and
 - Browser-level end-to-end verification **NOT RUN**: the browser connector reported that an originating connected browser context was required. The production build passing is not equivalent to browser interaction validation.
 
 **Release disposition unchanged: DEVELOP FURTHER / NOT READY.**
+
+## Parser isolation progress (2026-10-22)
+
+The ingestion route now runs PDF and DOCX parsing in a dedicated Node.js worker with a 10-second deadline, V8 worker resource limits (128 MB old generation, 32 MB young generation, 4 MB stack), a maximum of 200 reported PDF pages (checked before bulk page-text extraction), and a 2,000,000-character output cap. GitHub Actions #82 passed 29/29 tests, typechecking, and production build, including a real 201-page PDF rejection test.
+
+**Boundaries still unverified:** Worker `resourceLimits` do not constitute an operating-system process-level RSS or native allocation cap. The route still buffers uploads in memory, multiple concurrent requests could amplify resource use, and no ZIP archive expansion ratio quota, process/container memory quota, concurrency throttle, deployment packaging compatibility matrix, or dedicated browser end-to-end run has been independently verified. Thus this is an incremental mitigation, not security certification. Production deployments must explicitly test that the filesystem worker entry point is included in the deployed bundle.
+
+Three moderate npm audit findings remain unresolved pending an upstream compatible remediation or a separately validated replacement.
