@@ -35,3 +35,6 @@ jobs:
       - run: node --test tests/*.cjs
       - run: npm run typecheck
       - run: npm run build
+      - name: Verify ingest worker deployment trace
+        run: |
+          node -e 'const fs=require("fs"),path=require("path");const files=[];function walk(d){if(!fs.existsSync(d))return;for(const n of fs.readdirSync(d)){const p=path.join(d,n);const st=fs.statSync(p);if(st.isDirectory())walk(p);else if(p.endsWith(".nft.json")&&p.includes("ingest"))files.push(p)}}walk(".next/server");if(!files.length)throw Error("No ingest route trace located");const hit=files.some(f=>JSON.parse(fs.readFileSync(f,"utf8")).files.some(x=>x.includes("document-parser-worker.cjs")));console.log(JSON.stringify({traces:files,workerTraced:hit}));if(!hit)throw Error("Parser worker missing from ingest route deployment trace")'
