@@ -7,9 +7,9 @@ function makePDF(pageCount=1){
  const streams=Array.from({length:pageCount},(_,i)=>`BT /F1 12 Tf 30 100 Td (Page ${i+1} Fixture) Tj ET`);
  const objects=[
  "<< /Type /Catalog /Pages 2 0 R >>",
- `<< /Type /Pages /Kids [${streams.map((_,i)=>`${3+i*2} 0 R`).join(" ")}] /Count ${pageCount} >>`,
+ `<< /Type /Pages /Kids [${streams.map((_,i)=>`${3+i*3} 0 R`).join(" ")}] /Count ${pageCount} >>`,
  ...streams.flatMap((stream,i)=>[
- `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Resources << /Font << /F1 ${4+i*2} 0 R >> >> /Contents ${5+i*2} 0 R >>`,
+ `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Resources << /Font << /F1 ${4+i*3} 0 R >> >> /Contents ${5+i*3} 0 R >>`,
  "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
  "<< /Length "+Buffer.byteLength(stream)+" >>\nstream\n"+stream+"\nendstream"
  ])
@@ -44,7 +44,7 @@ test("real single-page PDF fixture extracts text but never certifies completenes
  const response=await ingest("fixture.pdf","application/pdf",makePDF());
  assert.equal(response.status,200,JSON.stringify(await response.clone().json()));
  const data=await response.json();
- assert.match(data.text,/Page One Fixture/);
+ assert.match(data.text,/Page 1 Fixture/);
  assert.equal(data.kind,"PDF");
  assert.equal(data.pageCount,1);
  assert.equal(data.extractionStatus,"PARTIAL");
