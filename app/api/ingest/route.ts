@@ -35,7 +35,7 @@ function parseInWorker(kind: "PDF" | "DOCX", bytes: Uint8Array): Promise<ParseRe
       if (!message.ok) finish(new Error(message.error ?? "Document extraction failed."));
       else finish(undefined, { text: message.text, total: message.total, messages: message.messages });
     });
-    worker.once("error", error => finish(error));
+    worker.once("error", error => finish(error instanceof Error ? error : new Error(String(error))));
     worker.once("exit", code => finish(new Error("Document parser worker exited before completing extraction (code " + code + ").")));
     worker.postMessage({ kind, bytes });
   });
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
       const text = enforceTextLimit(clean(parsed.text));
       const markers = [...text.matchAll(/\\[\\[PAGE (\\d+) OF (\\d+)\\]\\]/g)];
       const total = parsed.total;
-      const markersValid = Number.isInteger(total) && total > 0 &&
+      const markersValid = typeof total === "number" && Number.isInteger(total) && total > 0 &&
         markers.length === total &&
         markers.every((m, i) => Number(m[1]) === i + 1 && Number(m[2]) === total);
       const readable = text.replace(/\\[\\[PAGE \\d+ OF \\d+\\]\\]/g, "").trim();
