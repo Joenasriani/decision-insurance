@@ -86,3 +86,17 @@ print(base64.b64encode(b.getvalue()).decode())
  assert.equal(data.extractionStatus,"PARTIAL");
  assert.ok(data.notes.some(note=>/tables|layout/i.test(note)));
 });
+
+test("malformed DOCX archive is rejected without a success payload",async()=>{
+ const response=await ingest("broken.docx","application/vnd.openxmlformats-officedocument.wordprocessingml.document",Buffer.from("not a ZIP archive"));
+ assert.equal(response.status,400);
+ const data=await response.json();
+ assert.equal(typeof data.error,"string");
+ assert.ok(!("text" in data));
+});
+test("oversized uploaded documents fail before parser execution",async()=>{
+ const response=await ingest("oversized.docx","application/vnd.openxmlformats-officedocument.wordprocessingml.document",Buffer.alloc(20*1024*1024+1));
+ assert.equal(response.status,400);
+ const data=await response.json();
+ assert.match(data.error,/20 MB limit/);
+});
